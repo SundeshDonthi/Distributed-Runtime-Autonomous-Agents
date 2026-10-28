@@ -13,7 +13,7 @@ from runtime.routing.heuristic import (
     rank_candidates_with_details,
 )
 from runtime.routing.history import get_observed_stats_for_capability
-from runtime.routing.neural import NeuralScorer, predict_proba
+from runtime.routing.neural import Backend, NeuralScorer, predict_proba_batch
 from runtime.state import repository
 from runtime.tools.registry import tools_for_capability
 
@@ -24,21 +24,27 @@ DEFAULT_CONFIDENCE_THRESHOLD = 0.6
 
 
 def _neural_scores_for(
-    router_model: NeuralScorer, ranked: list[tuple]
+    router_model: NeuralScorer, ranked: list[tuple], neural_backend: Backend = "python"
 ) -> dict[str, float] | None:
-    """Scores every eligible candidate under the neural model. Returns None
-    (rather than raising) if the model's feature schema doesn't match what's
-    being logged today (Section 15D.2: a model trained on a stale feature
-    version shouldn't be trusted blindly -- its numbers would silently mean
-    something different from what the caller assumes) or if inference itself
-    fails for any reason -- Section 15A.1's "on... invalid candidate, use the
+    """Scores every eligible candidate under the neural model, in one
+    `predict_proba_batch` call rather than one `predict_proba` call per
+    candidate (Phase 9: the natural place to opt into the C++ batched-
+    inference kernel via `neural_backend`). Returns None (rather than
+    raising) if the model's feature schema doesn't match what's being logged
+    today (Section 15D.2: a model trained on a stale feature version
+    shouldn't be trusted blindly -- its numbers would silently mean something
+    different from what the caller assumes) or if inference itself fails for
+    any reason -- Section 15A.1's "on... invalid candidate, use the
     deterministic baseline" extends naturally to "on error, don't propagate
     it into dispatch."
     """
     if router_model.feature_version != FEATURE_VERSION:
         return None
     try:
-        return {tool.name: predict_proba(router_model, features) for tool, _score, features in ranked}
+        tools = [tool.name for tool, _score, _features in ranked]
+        feature_dicts = [features for _tool, _score, features in ranked]
+        scores = predict_proba_batch(router_model, feature_dicts, backend=neural_backend)
+        return dict(zip(tools, scores))
     except Exception:  # noqa: BLE001 - any inference failure just means "no neural scores"
         return None
 
@@ -52,6 +58,7 @@ def resolve_task_tool(
     router_model: NeuralScorer | None = None,
     routing_mode: RoutingMode = "heuristic",
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    neural_backend: Backend = "python",
 ) -> str | None:
     """Routing step of dispatch (Section 15A.1: the router "ranks eligible
     tool + strategy pairs for an already-READY task" -- a step the scheduler
@@ -85,6 +92,12 @@ def resolve_task_tool(
     (epsilon-greedy exploration) -- this is about data collection, not about
     which policy nominally decided, so it applies the same way regardless of
     `routing_mode`.
+
+    `neural_backend` (Phase 9) picks "python" (the default reference
+    implementation) or "cpp" (the compiled kernel) for whatever neural
+    inference `routing_mode` ends up calling for; it does nothing when no
+    neural inference happens at all (`routing_mode="heuristic"`, or no
+    `router_model`).
     """
     task_input = task.input or {}
     if task_input.get("tool") is not None:
@@ -105,7 +118,7 @@ def resolve_task_tool(
     model_version_used = "heuristic-v1"
 
     if routing_mode in ("shadow", "active") and router_model is not None:
-        computed = _neural_scores_for(router_model, ranked)
+        computed = _neural_scores_for(router_model, ranked, neural_backend)
         if computed is None:
             if routing_mode == "active":
                 fallback_reason = "feature_version_mismatch_or_inference_error"

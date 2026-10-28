@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from runtime.models.task import Task
 from runtime.routing.dispatch import resolve_task_tool
-from runtime.routing.neural import NeuralScorer
+from runtime.routing.neural import NeuralScorer, native_backend_available
 from runtime.state import repository
 
 # A scorer that strongly prefers lookup_careful: static_reliability is its
@@ -156,3 +158,30 @@ def test_exploration_overrides_an_active_neural_pick_and_clears_fallback_reason(
     assert decision["was_exploration"] is True
     assert decision["fallback_reason"] is None
     assert decision["model_version"] == "heuristic-v1"
+
+
+@pytest.mark.skipif(
+    not native_backend_available(),
+    reason="runtime.routing._native hasn't been built -- run "
+    "`python setup.py build_ext --inplace`",
+)
+def test_active_mode_picks_the_same_tool_with_the_cpp_inference_backend(db_session):
+    """Phase 9's `neural_backend` only changes where the arithmetic runs, not
+    dispatch's actual decision -- the same `PREFERS_CAREFUL` scorer, routed
+    through the C++ batched-inference kernel instead of the Python reference
+    loop, must pick the exact same tool `test_active_mode_uses_the_neural_
+    pick_when_confident` already proves the Python backend picks.
+    """
+    task = _task(db_session, "t8")
+    decision_id = resolve_task_tool(
+        db_session,
+        task,
+        router_model=PREFERS_CAREFUL,
+        routing_mode="active",
+        neural_backend="cpp",
+    )
+    decision = repository.get_routing_decision(db_session, decision_id)
+
+    assert task.input["tool"] == "lookup_careful"
+    assert decision["model_version"] == "test-prefers-careful"
+    assert decision["fallback_reason"] is None

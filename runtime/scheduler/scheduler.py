@@ -13,7 +13,7 @@ from runtime.models.workflow import WorkflowStatus
 from runtime.planner.planner import Planner, RuleBasedPlanner
 from runtime.routing.dispatch import DEFAULT_CONFIDENCE_THRESHOLD, RoutingMode, record_outcome, resolve_task_tool
 from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights
-from runtime.routing.neural import NeuralScorer
+from runtime.routing.neural import Backend, NeuralScorer
 from runtime.recovery import replanner, retry
 from runtime.scheduler import idempotency, leases
 from runtime.scheduler.dag import (
@@ -165,6 +165,7 @@ async def run_workflow_async(
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
     worker_mode: WorkerMode = "embedded",
     distributed_result_timeout: float = DEFAULT_DISTRIBUTED_RESULT_TIMEOUT_SECONDS,
+    neural_backend: Backend = "python",
 ) -> WorkflowStatus:
     """The scheduler loop (Phases 2-7). Each round's READY tasks are pushed
     onto a Redis-backed queue (Section 5.7) and pulled by up to
@@ -213,6 +214,11 @@ async def run_workflow_async(
       silent fallback to "embedded" because an unreachable Redis in
       distributed mode means the worker fleet is unreachable too, not that
       it's safe to quietly run the work locally instead.
+    - `neural_backend` (Phase 9) picks "python" or "cpp" for whatever neural
+      inference `routing_mode`/`router_model` end up calling for -- see
+      `runtime.routing.neural`'s own docstrings for why training, not single-
+      candidate inference, is where the compiled kernel actually earns its
+      keep.
     """
     worker = worker or Worker()
     planner = planner or RuleBasedPlanner()
@@ -299,6 +305,7 @@ async def run_workflow_async(
                         router_model,
                         routing_mode,
                         confidence_threshold,
+                        neural_backend,
                     )
                 )
                 is not None
@@ -413,6 +420,7 @@ def run_workflow(
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
     worker_mode: WorkerMode = "embedded",
     distributed_result_timeout: float = DEFAULT_DISTRIBUTED_RESULT_TIMEOUT_SECONDS,
+    neural_backend: Backend = "python",
 ) -> WorkflowStatus:
     """Sync wrapper over `run_workflow_async` for callers (the FastAPI
     background task, the existing test suite) that aren't already inside an
@@ -437,5 +445,6 @@ def run_workflow(
             confidence_threshold,
             worker_mode,
             distributed_result_timeout,
+            neural_backend,
         )
     )

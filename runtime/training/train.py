@@ -5,7 +5,7 @@ import hashlib
 from sqlalchemy.orm import Session
 
 from runtime.routing.heuristic import FEATURE_VERSION
-from runtime.routing.neural import NeuralScorer, train_logistic_regression
+from runtime.routing.neural import Backend, NeuralScorer, train_logistic_regression
 from runtime.training.datasets import export_training_rows, selected_candidate_features
 
 MIN_TRAINING_EXAMPLES = 20
@@ -35,12 +35,18 @@ def train_router_model(
     model_version: str | None = None,
     epochs: int = 300,
     learning_rate: float = 0.5,
+    backend: Backend = "python",
 ) -> tuple[NeuralScorer, dict]:
     """Trains on the "train" split only (Section 15D.2's leakage prevention --
     evaluation against val/test happens separately in `evaluate.py` so
     training and evaluation never accidentally share a code path that could
     leak held-out data into the fit). Returns the trained scorer plus basic
     stats about what it was trained on, for the record.
+
+    `backend="cpp"` (Phase 9) runs the fit through `runtime.routing.neural`'s
+    compiled kernel instead of its pure-Python reference loop -- same
+    algorithm, same result within floating-point tolerance, just faster on a
+    large enough training set (see `benchmarks/benchmark_cpp_router.py`).
     """
     rows = export_training_rows(session, seed=seed, train_frac=train_frac, val_frac=val_frac)
     train_rows = [r for r in rows if r["split"] == "train" and r["capability"] == capability]
@@ -67,6 +73,7 @@ def train_router_model(
         training_dataset_version=dataset_version,
         epochs=epochs,
         learning_rate=learning_rate,
+        backend=backend,
     )
 
     n_positive = sum(1 for _, label in examples if label)
