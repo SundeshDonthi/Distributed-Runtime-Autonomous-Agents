@@ -434,6 +434,31 @@ def record_outbox_event(session: Session, aggregate_id: str, event_type: str, pa
     session.flush()
 
 
+def get_outbox_events_for_workflow(session: Session, workflow_id: str) -> list[dict]:
+    """Every state-transition event for this workflow's tasks, oldest first --
+    `OutboxEventRow.aggregate_id` is a task id, not a workflow id, so this
+    joins through `tasks` rather than filtering directly. What `GET
+    /workflows/{id}/trace` (Section 15J Phase 8) merges with routing decisions
+    and replan events into one timeline.
+    """
+    stmt = (
+        select(OutboxEventRow)
+        .join(TaskRow, TaskRow.id == OutboxEventRow.aggregate_id)
+        .where(TaskRow.workflow_id == workflow_id)
+        .order_by(OutboxEventRow.id)
+    )
+    return [
+        {
+            "id": row.id,
+            "task_id": row.aggregate_id,
+            "event_type": row.event_type,
+            "payload": row.payload,
+            "created_at": row.created_at,
+        }
+        for row in session.scalars(stmt).all()
+    ]
+
+
 def get_undelivered_outbox_events(session: Session, limit: int = 100) -> list[OutboxEventRow]:
     stmt = (
         select(OutboxEventRow)

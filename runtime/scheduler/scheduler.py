@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 from datetime import timedelta
+from typing import Literal
 
 import redis as redis_lib
 from sqlalchemy.orm import Session
@@ -22,7 +23,7 @@ from runtime.scheduler.dag import (
     ready_tasks,
     workflow_succeeded,
 )
-from runtime.scheduler.queue import ReadyQueue
+from runtime.scheduler.queue import DispatchQueue, ReadyQueue, ResultQueue
 from runtime.state import repository
 from runtime.state.orm import utcnow
 from runtime.state.redis_client import get_redis, is_reachable
@@ -30,6 +31,9 @@ from runtime.workers.worker import Worker
 
 DEFAULT_MAX_CONCURRENCY = 8
 MAX_POLL_SECONDS = 5.0
+DEFAULT_DISTRIBUTED_RESULT_TIMEOUT_SECONDS = 30.0
+
+WorkerMode = Literal["embedded", "distributed"]
 
 
 async def _run_round_via_queue(
@@ -60,6 +64,51 @@ async def _run_round_directly(
             return await worker.execute_async(task)
 
     await asyncio.gather(*(dispatch(t) for t in round_tasks))
+
+
+async def _run_round_distributed(
+    round_tasks: list[Task],
+    dispatch_queue: DispatchQueue,
+    result_queue: ResultQueue,
+    result_timeout: float,
+) -> None:
+    """Phase 8's genuinely cross-process round dispatch: push every task in
+    this round onto the global `DispatchQueue` for independent worker OS
+    processes to pick up (`runtime.workers.worker_process`), then wait for
+    each one's result to come back on this workflow's `ResultQueue`. Unlike
+    `_run_round_via_queue`/`_run_round_directly`, nothing here runs the tool
+    itself or shares a process with whatever does -- `by_id` exists only to
+    apply a remote worker's reported outcome back onto the same in-memory
+    `Task` object the rest of `run_workflow_async`'s round already holds a
+    reference to, so retry/replan/idempotency/outbox logic downstream never
+    needs to know dispatch happened out of process.
+    """
+    by_id = {task.id: task for task in round_tasks}
+    for task in round_tasks:
+        task.status = TaskStatus.RUNNING
+        task.started_at = task.started_at or utcnow()
+        dispatch_queue.push(
+            task.workflow_id, task.id, (task.input or {}).get("tool"), (task.input or {}).get("args", {})
+        )
+
+    pending = set(by_id)
+    while pending:
+        result = await asyncio.to_thread(result_queue.pop, result_timeout)
+        if result is None:
+            raise TimeoutError(
+                f"no distributed worker reported a result within {result_timeout}s "
+                f"for task(s) {sorted(pending)} -- is a worker process running?"
+            )
+        task_id = result["task_id"]
+        if task_id not in pending:
+            continue  # a stale or duplicate result; nothing in this round wants it
+        task = by_id[task_id]
+        task.status = TaskStatus(result["status"])
+        task.output = result["output"]
+        task.error = result["error"]
+        task.error_category = result["error_category"]
+        task.completed_at = utcnow()
+        pending.discard(task_id)
 
 
 async def _heartbeat_loop(
@@ -114,6 +163,8 @@ async def run_workflow_async(
     router_model: NeuralScorer | None = None,
     routing_mode: RoutingMode = "heuristic",
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    worker_mode: WorkerMode = "embedded",
+    distributed_result_timeout: float = DEFAULT_DISTRIBUTED_RESULT_TIMEOUT_SECONDS,
 ) -> WorkflowStatus:
     """The scheduler loop (Phases 2-7). Each round's READY tasks are pushed
     onto a Redis-backed queue (Section 5.7) and pulled by up to
@@ -150,13 +201,38 @@ async def run_workflow_async(
       heuristic (Section 15A.1) recorded via `fallback_reason` otherwise.
       Left at "heuristic" (the default), behavior is unaffected by
       `router_model` even if one is passed.
+    - `worker_mode` (Phase 8) chooses where a round's tasks actually run.
+      "embedded" (the default, Phases 1-7's behavior) runs them as `asyncio`
+      coroutines sharing this process's memory, via `worker` directly. Pass
+      "distributed" to instead hand them to independent worker OS processes
+      (`runtime.workers.worker_process`, any number of them, on any machine
+      that can reach the same Redis) over `DispatchQueue`/`ResultQueue` --
+      this is what `runtime.scheduler.scheduler_process` uses, and what makes
+      the API, the scheduler, and the workers genuinely separate processes
+      rather than coroutines in one. Requires a reachable Redis; there is no
+      silent fallback to "embedded" because an unreachable Redis in
+      distributed mode means the worker fleet is unreachable too, not that
+      it's safe to quietly run the work locally instead.
     """
     worker = worker or Worker()
     planner = planner or RuleBasedPlanner()
     redis_client = redis_client or get_redis()
-    queue = ReadyQueue(redis_client, workflow_id) if is_reachable(redis_client) else None
+    if worker_mode == "distributed" and not is_reachable(redis_client):
+        raise RuntimeError(
+            "worker_mode='distributed' requires a reachable Redis -- it's how "
+            "task-execution requests reach independent worker processes"
+        )
+    queue = (
+        ReadyQueue(redis_client, workflow_id)
+        if worker_mode == "embedded" and is_reachable(redis_client)
+        else None
+    )
     if queue:
         queue.clear()
+    dispatch_queue = DispatchQueue(redis_client) if worker_mode == "distributed" else None
+    result_queue = ResultQueue(redis_client, workflow_id) if worker_mode == "distributed" else None
+    if result_queue:
+        result_queue.clear()  # discard anything left over from a previous crashed run
     heartbeat_interval = heartbeat_interval if heartbeat_interval is not None else lease_seconds / 3
 
     tasks = repository.get_tasks(session, workflow_id)
@@ -249,7 +325,11 @@ async def run_workflow_async(
                     _heartbeat_loop(session, dispatched, heartbeat_interval, lease_seconds, stop_heartbeat)
                 )
                 try:
-                    if queue is not None:
+                    if worker_mode == "distributed":
+                        await _run_round_distributed(
+                            dispatched, dispatch_queue, result_queue, distributed_result_timeout
+                        )
+                    elif queue is not None:
                         await _run_round_via_queue(dispatched, queue, worker, max_concurrency)
                     else:
                         await _run_round_directly(dispatched, worker, max_concurrency)
@@ -310,6 +390,8 @@ async def run_workflow_async(
     session.commit()
     if queue:
         queue.clear()
+    if result_queue:
+        result_queue.clear()
     return final_status
 
 
@@ -329,6 +411,8 @@ def run_workflow(
     router_model: NeuralScorer | None = None,
     routing_mode: RoutingMode = "heuristic",
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    worker_mode: WorkerMode = "embedded",
+    distributed_result_timeout: float = DEFAULT_DISTRIBUTED_RESULT_TIMEOUT_SECONDS,
 ) -> WorkflowStatus:
     """Sync wrapper over `run_workflow_async` for callers (the FastAPI
     background task, the existing test suite) that aren't already inside an
@@ -351,5 +435,7 @@ def run_workflow(
             router_model,
             routing_mode,
             confidence_threshold,
+            worker_mode,
+            distributed_result_timeout,
         )
     )

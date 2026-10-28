@@ -56,6 +56,49 @@ def test_end_to_end_workflow_lifecycle(client):
     assert all(t["status"] == "COMPLETED" for t in body["tasks"])
 
 
+def test_graph_endpoint_describes_the_workflow_as_nodes_and_edges(client):
+    resp = client.post("/workflows", json={"objective": "Analyze NVIDIA, AMD, and Intel."})
+    workflow_id = resp.json()["id"]
+
+    graph = client.get(f"/workflows/{workflow_id}/graph")
+    assert graph.status_code == 200
+    body = graph.json()
+    assert body["workflow_id"] == workflow_id
+    assert len(body["nodes"]) == 4
+    assert all(n["status"] == "COMPLETED" for n in body["nodes"])
+    # At least one dependency edge must exist for a 4-task analysis plan --
+    # if every task were independent this wouldn't be much of a DAG.
+    assert len(body["edges"]) > 0
+    node_ids = {n["id"] for n in body["nodes"]}
+    assert all(e["from"] in node_ids and e["to"] in node_ids for e in body["edges"])
+
+
+def test_graph_endpoint_returns_404_for_unknown_workflow(client):
+    resp = client.get("/workflows/does_not_exist/graph")
+    assert resp.status_code == 404
+
+
+def test_trace_endpoint_returns_a_time_ordered_merge_of_every_event_source(client):
+    resp = client.post("/workflows", json={"objective": "Analyze NVIDIA, AMD, and Intel."})
+    workflow_id = resp.json()["id"]
+
+    trace = client.get(f"/workflows/{workflow_id}/trace")
+    assert trace.status_code == 200
+    events = trace.json()
+    assert len(events) > 0
+    # Every task's completion must show up as an outbox event -- the trace's
+    # whole point is to be a complete substitute for "tail the process log."
+    completed_events = [e for e in events if e["source"] == "outbox" and e["type"] == "task.completed"]
+    assert len(completed_events) == 4
+    timestamps = [e["timestamp"] for e in events]
+    assert timestamps == sorted(timestamps)
+
+
+def test_trace_endpoint_returns_404_for_unknown_workflow(client):
+    resp = client.get("/workflows/does_not_exist/trace")
+    assert resp.status_code == 404
+
+
 def test_tools_endpoint_lists_registered_tools_including_mcp_discovered_ones(client):
     resp = client.get("/tools")
     assert resp.status_code == 200

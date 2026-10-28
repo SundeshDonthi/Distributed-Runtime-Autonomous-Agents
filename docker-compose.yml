@@ -1,0 +1,74 @@
+# Section 15J Phase 8: API, scheduler, and worker as genuinely separate OS
+# processes, each in its own container, coordinating only through Postgres
+# and Redis -- never a shared in-memory object. Scale the worker fleet with:
+#
+#   docker compose up --build --scale worker=3
+#
+# `api` runs with SCHEDULING_MODE=distributed, so creating a workflow hands it
+# to the `scheduler` service (runtime.scheduler.scheduler_process) over Redis
+# instead of running it inline the way the embedded default (Phases 1-7, and
+# this project's own test suite) does.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agent_runtime
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build: .
+    command: ["uvicorn", "runtime.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres/agent_runtime
+      REDIS_URL: redis://redis:6379/0
+      SCHEDULING_MODE: distributed
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    build: .
+    command: ["python", "-m", "runtime.scheduler.scheduler_process"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres/agent_runtime
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    # No DATABASE_URL: a worker process never touches Postgres (Section 5.5)
+    # -- it only ever pulls a task-execution request off Redis, runs the
+    # tool, and reports the result back over Redis.
+    command: ["python", "-m", "runtime.workers.worker_process"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

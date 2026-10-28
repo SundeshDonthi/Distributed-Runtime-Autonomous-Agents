@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -9,13 +10,25 @@ from runtime.models.task import Task
 from runtime.models.workflow import Workflow, WorkflowWithTasks
 from runtime.planner.planner import RuleBasedPlanner
 from runtime.planner.validator import PlanValidationError, validate_plan
+from runtime.scheduler.queue import PendingWorkflowQueue
 from runtime.scheduler.scheduler import run_workflow
 from runtime.state import repository
 from runtime.state.db import get_session
+from runtime.state.redis_client import get_redis
 from runtime.tools.registry import list_tools, get_tool_metadata
 
 router = APIRouter()
 planner = RuleBasedPlanner()
+
+# Section 15J Phase 8: "embedded" (the default) keeps Phases 1-7's behavior --
+# this process runs the workflow itself, inline, via FastAPI's own
+# `BackgroundTasks`. "distributed" instead hands the workflow id to a
+# standalone `runtime.scheduler.scheduler_process`, which dispatches its
+# tasks to independent worker processes -- what Docker Compose's `api`
+# service sets so the API, scheduler, and workers are genuinely separate OS
+# processes. Read once at import time, like `DATABASE_URL`/`REDIS_URL`
+# elsewhere in this project, not re-read per request.
+SCHEDULING_MODE = os.environ.get("SCHEDULING_MODE", "embedded")
 
 
 class CreateWorkflowRequest(BaseModel):
@@ -41,7 +54,10 @@ def create_workflow(req: CreateWorkflowRequest, background_tasks: BackgroundTask
         workflow = repository.create_workflow(session, workflow_id, req.objective)
         repository.save_tasks(session, tasks)
 
-    background_tasks.add_task(_run_workflow_background, workflow_id)
+    if SCHEDULING_MODE == "distributed":
+        PendingWorkflowQueue(get_redis()).push(workflow_id)
+    else:
+        background_tasks.add_task(_run_workflow_background, workflow_id)
     return workflow
 
 
@@ -135,3 +151,73 @@ def activate_router_model(model_version: str) -> dict:
             repository.set_router_model_status(session, previous_active["model_version"], "retired")
         repository.set_router_model_status(session, model_version, "active")
         return repository.get_router_model(session, model_version)
+
+
+@router.get("/workflows/{workflow_id}/graph")
+def get_workflow_graph(workflow_id: str) -> dict:
+    """Section 15J Phase 8's observability goal, the structural half: every
+    task as a node (with its status and whatever tool/capability it addresses)
+    and a dependency edge for every `task_dependencies` row -- enough to
+    render a plan, or what a replan changed about it, as an actual DAG rather
+    than a flat task list. Reading this doesn't depend on which OS process
+    (API, scheduler, or any worker) last touched the workflow -- Postgres is
+    still the one shared source of truth Phase 8's split into separate
+    processes doesn't change.
+    """
+    with get_session() as session:
+        workflow = repository.get_workflow(session, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="workflow not found")
+
+    nodes = [
+        {
+            "id": task.id,
+            "description": task.description,
+            "status": task.status.value,
+            "tool": (task.input or {}).get("tool"),
+            "capability": (task.input or {}).get("capability"),
+        }
+        for task in workflow.tasks
+    ]
+    edges = [
+        {"from": depends_on_id, "to": task.id}
+        for task in workflow.tasks
+        for depends_on_id in task.dependencies
+    ]
+    return {"workflow_id": workflow_id, "plan_version": workflow.plan_version, "nodes": nodes, "edges": edges}
+
+
+@router.get("/workflows/{workflow_id}/trace")
+def get_workflow_trace(workflow_id: str) -> list[dict]:
+    """Section 15J Phase 8's observability goal, the temporal half: one
+    merged, time-ordered timeline of everything that happened to a workflow
+    -- every task state transition (the outbox, Section 15F.4), every routing
+    decision, and every replan -- regardless of which OS process actually did
+    it. Before Phase 8 this was always reconstructable by tailing one
+    process's stdout; once execution is genuinely spread across an API
+    process, a scheduler process, and any number of worker processes, there
+    is no single process left to tail, so this is now the only coherent way
+    to see what happened to a given workflow.
+    """
+    with get_session() as session:
+        workflow = repository.get_workflow(session, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="workflow not found")
+        outbox_events = repository.get_outbox_events_for_workflow(session, workflow_id)
+        routing_decisions = repository.get_routing_decisions_for_workflow(session, workflow_id)
+        replan_events = repository.get_replan_events(session, workflow_id)
+
+    events = [
+        {"timestamp": e["created_at"], "type": e["event_type"], "source": "outbox", "detail": e}
+        for e in outbox_events
+    ]
+    events += [
+        {"timestamp": d["created_at"], "type": "routing.decision", "source": "routing", "detail": d}
+        for d in routing_decisions
+    ]
+    events += [
+        {"timestamp": r["created_at"], "type": "replan", "source": "replanner", "detail": r}
+        for r in replan_events
+    ]
+    events.sort(key=lambda e: e["timestamp"])
+    return events

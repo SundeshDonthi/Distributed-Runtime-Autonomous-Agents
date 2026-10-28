@@ -234,7 +234,77 @@ Tracking the project description's Section 15J roadmap (Phases 1-9).
     the same pattern `conftest.py`'s own `db_session` fixture already used
     correctly -- which sidesteps the import-order race instead of trying to
     win it.
-- Phase 8 (real multi-process distribution), 9 (C++): not started yet.
+- **Phase 8 -- Real multi-process distribution: done.**
+  - **The API, scheduler, and workers are genuinely separate OS processes**,
+    not `asyncio` coroutines sharing one process's memory. A new
+    `worker_mode` on `run_workflow`/`run_workflow_async`
+    (`runtime/scheduler/scheduler.py`) adds `"distributed"` alongside
+    Phases 1-7's `"embedded"` default: instead of calling the in-process
+    `Worker` directly, a round's tasks are pushed onto a global
+    `DispatchQueue` (`runtime/scheduler/queue.py`) for any number of
+    independent `runtime.workers.worker_process` processes to pick up, and
+    their reported outcomes come back over a per-workflow `ResultQueue`.
+    Everything downstream of that -- retry classification, replanning,
+    idempotency, outbox events, fencing -- is unchanged, because it only ever
+    sees the same in-memory `Task` object updated with a result, whether that
+    result came from a coroutine in this process or a tool call that ran on
+    a different machine entirely.
+  - **A worker process never touches Postgres** (`runtime/workers/
+    worker_process.py`): it only speaks Redis, reusing the exact same
+    `Worker.execute_async` Phases 1-7 already call in-process, so "where the
+    tool actually ran" is the only thing that changed. All task-state
+    ownership (leases, fencing, retries) stays exactly where Phase 4 put it
+    -- in the scheduler -- never duplicated across however many worker
+    processes happen to be running.
+  - **The scheduler is now optionally its own process, too**
+    (`runtime/scheduler/scheduler_process.py`): it consumes workflow ids off
+    a global `PendingWorkflowQueue`, bounding how many workflows it runs
+    concurrently with a semaphore (each on its own DB session), and runs each
+    one with `worker_mode="distributed"`. `POST /workflows`
+    (`runtime/api/routes.py`) picks between handing a new workflow to this
+    queue or running it inline via FastAPI's own `BackgroundTasks`, based on
+    a `SCHEDULING_MODE` env var -- `"embedded"` (the default, Phases 1-7's
+    behavior, and what the entire existing test suite still exercises
+    unchanged) or `"distributed"`. This mirrors the project's existing
+    "optional at runtime" pattern for Redis and MCP (Section 15A.1): nothing
+    about the single-process path regressed to add the multi-process one.
+  - **Docker Compose** (`docker-compose.yml`, `Dockerfile`): one image, three
+    roles -- `api`, `scheduler`, and `worker` services built from the same
+    Dockerfile with different `command:`s, plus `postgres` and `redis`,
+    coordinating only through `DATABASE_URL`/`REDIS_URL` pointing at each
+    other's service names. `docker compose up --scale worker=3` runs three
+    independent worker containers against one scheduler and one API. Honest
+    caveat: this machine has no Docker installed, so the compose file itself
+    was validated as well-formed YAML but not run end-to-end in containers;
+    what *was* run end-to-end, as real separate OS processes talking only
+    through Postgres/Redis, is the exact same `scheduler_process`/
+    `worker_process` entrypoints the compose file's `command:`s invoke --
+    the part Docker adds on top is process isolation and packaging, not new
+    application logic.
+  - **Trace and graph endpoints** (`runtime/api/routes.py`): `GET
+    /workflows/{id}/graph` returns the workflow as nodes (tasks, with status
+    and resolved tool/capability) and dependency edges, for rendering an
+    actual DAG. `GET /workflows/{id}/trace` merges outbox events, routing
+    decisions, and replan events into one time-ordered timeline
+    (`repository.get_outbox_events_for_workflow` joins outbox rows through
+    `tasks` since they're keyed by task id, not workflow id). Both exist
+    because Phase 8 itself removed the thing observability used to lean on
+    for free -- "tail the one process's stdout" stopped being a coherent
+    debugging strategy the moment execution could legitimately span an API
+    process, a scheduler process, and an unbounded number of worker
+    processes on different machines.
+  - Verified for real, not just unit-tested in isolation:
+    `tests/test_distributed_worker.py` pushes a request by hand onto the
+    dispatch queue and confirms a real `worker_process` subprocess executes
+    it and reports back correctly (including the permanent-failure path for
+    an unknown tool, proving Phase 4's retry classification survives an
+    out-of-process worker unchanged), and
+    `tests/test_scheduler_process.py` runs a complete workflow through a
+    real `scheduler_process` subprocess *and* a real `worker_process`
+    subprocess at once, coordinating purely through a live Postgres and
+    Redis -- this project's first test where no Python call stack connects
+    "the workflow was created" to "the workflow completed" at all.
+- Phase 9 (C++): not started yet.
 
 No LLM in the planner yet (`runtime/planner/planner.py` is still rule-based
 -- see its docstring); that's intentionally decoupled from the rest of this
@@ -276,6 +346,29 @@ curl -X POST localhost:8000/workflows \
 curl localhost:8000/workflows/<workflow_id>
 ```
 
+## Run distributed (Docker Compose)
+
+Phase 8: the API, scheduler, and workers as genuinely separate OS processes,
+coordinating only through Postgres and Redis.
+
+```bash
+docker compose up --build --scale worker=3
+```
+
+```bash
+curl -X POST localhost:8000/workflows \
+  -H 'Content-Type: application/json' \
+  -d '{"objective": "Analyze NVIDIA, AMD, and Intel."}'
+
+curl localhost:8000/workflows/<workflow_id>/graph
+curl localhost:8000/workflows/<workflow_id>/trace
+```
+
+`api` runs with `SCHEDULING_MODE=distributed`, so creating a workflow hands
+it to the `scheduler` service over Redis instead of running it inline the
+way the single-process `uvicorn` command above (and the entire test suite)
+does by default.
+
 ## Test
 
 ```bash
@@ -298,28 +391,36 @@ python -m benchmarks.export_training_dataset   # writes training_dataset.jsonl
 ```
 runtime/
   api/         FastAPI app/routes (/workflows, /tools, /workflows/{id}/
-               routing-decisions, /workflows/{id}/replan-events)
+               routing-decisions, /workflows/{id}/replan-events,
+               /workflows/{id}/graph, /workflows/{id}/trace, /router-models)
   models/      Pydantic domain models (Workflow, Task)
   planner/     Objective -> task graph (generate_plan) and blocked-task ->
                subplan (generate_subplan), plus DAG validation
-  scheduler/   dag.py (readiness), scheduler.py (the async run loop + Redis
-               queue), leases.py (claim/fencing/reclaim),
+  scheduler/   dag.py (readiness), scheduler.py (the async run loop;
+               `worker_mode` "embedded" via Redis/direct dispatch or
+               "distributed" via queue.py's DispatchQueue/ResultQueue),
+               scheduler_process.py (Phase 8's standalone scheduler OS
+               process), leases.py (claim/fencing/reclaim),
                idempotency.py (cached-result short-circuit)
   recovery/    retry.py (transient/permanent classification + backoff),
                replanner.py (Section 5.10's graph mutation)
-  workers/     Task execution (async, offloaded to a thread per tool call) --
-               only ever runs an already-resolved tool, never routes itself;
-               validates args against the tool's JSON schema before calling it
+  workers/     worker.py (Task execution -- async, offloaded to a thread per
+               tool call -- only ever runs an already-resolved tool, never
+               routes itself; validates args against the tool's JSON schema),
+               worker_process.py (Phase 8's standalone worker OS process,
+               never touches Postgres)
   tools/       registry.py (tool metadata incl. input_schema), mcp_client.py
                (discovers tools from a real MCP server over stdio)
   routing/     heuristic.py (scoring + feature snapshots), history.py
                (observed stats from past tool calls), dispatch.py (the
                scheduler's routing step: resolve a capability to a tool,
-               log the decision + feature snapshots, log the outcome)
+               log the decision + feature snapshots, log the outcome),
+               neural.py (from-scratch logistic regression scorer)
   training/    datasets.py (generates a labeled dataset via controlled,
                exploratory benchmark runs, Section 15C.3; exports it with
                splits), splits.py (deterministic train/val/test assignment
-               by workflow, Section 15D.2)
+               by workflow, Section 15D.2), train.py/evaluate.py/
+               calibrate.py (Phase 7's training + evaluation pipeline)
   state/       SQLAlchemy ORM + repository (Postgres) and the Redis client
 mcp_servers/   A real (demo) MCP server, launched as a subprocess by
                runtime/tools/mcp_client.py -- proves genuine dynamic tool
@@ -329,6 +430,9 @@ scripts/       chaos_run_workflow.py (the subprocess entry point the chaos
                recreate the schema -- see the Phase 4 scope boundary above)
 tests/
 benchmarks/    Standalone scripts proving systems-level claims (Section 16)
+Dockerfile, docker-compose.yml
+               Phase 8: one image (api/scheduler/worker share it, different
+               `command:`s) plus postgres/redis -- see "Run distributed"
 ```
 
 ## Chaos test

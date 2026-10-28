@@ -145,3 +145,33 @@ def test_task_transitions_write_outbox_events(db_session):
     repository.mark_outbox_event_delivered(db_session, next(e.id for e in events if e.aggregate_id == "t1"))
     remaining = repository.get_undelivered_outbox_events(db_session)
     assert "t1" not in {e.aggregate_id for e in remaining}
+
+
+def test_get_outbox_events_for_workflow_does_not_leak_across_workflows(db_session):
+    """`OutboxEventRow.aggregate_id` is a task id, not a workflow id --
+    `get_outbox_events_for_workflow` (Section 15J Phase 8's `/trace`
+    endpoint) has to join through `tasks` to scope correctly, so this proves
+    that join doesn't accidentally match a same-named task id from another
+    workflow.
+    """
+    repository.create_workflow(db_session, "wf_outbox_a", "a")
+    repository.create_workflow(db_session, "wf_outbox_b", "b")
+    repository.save_tasks(
+        db_session,
+        [
+            Task(id="t1", workflow_id="wf_outbox_a", description="t",
+                 input={"tool": "echo", "args": {"text": "a"}}),
+            Task(id="t1_b", workflow_id="wf_outbox_b", description="t",
+                 input={"tool": "echo", "args": {"text": "b"}}),
+        ],
+    )
+
+    run_workflow(db_session, "wf_outbox_a")
+    run_workflow(db_session, "wf_outbox_b")
+
+    events_a = repository.get_outbox_events_for_workflow(db_session, "wf_outbox_a")
+    assert {e["task_id"] for e in events_a} == {"t1"}
+    events_b = repository.get_outbox_events_for_workflow(db_session, "wf_outbox_b")
+    assert {e["task_id"] for e in events_b} == {"t1_b"}
+    # Oldest first -- a trace reads top-to-bottom as "what happened, in order."
+    assert [e["id"] for e in events_a] == sorted(e["id"] for e in events_a)
