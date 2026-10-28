@@ -25,9 +25,23 @@ Phase 1 proved the sequential path. Phase 2 adds:
   `runtime/state/redis_client.py`), per Section 15A.1's "optional at runtime"
   philosophy.
 
+Also underway, toward Section 15's tool-routing / neural-routing work: a
+**heuristic router** (`runtime/routing/heuristic.py`) that scores competing
+tools for the same capability (`capability_match + reliability - latency -
+cost`) and picks the best one -- this is the permanent deterministic fallback
+a future neural scorer will degrade to, not a throwaway step. A task now
+addresses work either by exact tool name (`{"tool": "echo"}`, bypasses
+routing) or by capability (`{"capability": "lookup"}`, routed). `lookup_fast`
+vs `lookup_careful` in the tool registry exist specifically to give the
+router a real latency/reliability tradeoff to reason about (Section 15's own
+Tool A/B example).
+
 Still no LLM, no MCP, and no real distribution across worker processes yet --
 those are Phase 3/6 (see `runtime/planner/planner.py` docstring and the
-roadmap in the project description, Section 15J / Section 17).
+roadmap in the project description, Section 15J / Section 17). The neural
+router itself (Section 15C) is further out still -- it needs logged routing
+decisions/outcomes as training data first (Section 15D), which doesn't exist
+yet either.
 
 ## Setup
 
@@ -89,7 +103,9 @@ runtime/
   scheduler/   Dependency-ready-task computation, the async run loop, and the
                Redis-backed ready-task queue
   workers/     Task execution (async, offloaded to a thread per tool call)
-  tools/       Tool registry (echo, uppercase, delay)
+  tools/       Tool registry, with per-tool metadata (latency/reliability/cost)
+  routing/     Heuristic tool/strategy selection (Section 15), the fallback a
+               future neural router degrades to
   state/       SQLAlchemy ORM + repository (Postgres) and the Redis client
 tests/
 benchmarks/    Standalone scripts proving systems-level claims (Section 16)
