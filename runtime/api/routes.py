@@ -105,3 +105,33 @@ def get_workflow_replan_events(workflow_id: str) -> list[dict]:
         if workflow is None:
             raise HTTPException(status_code=404, detail="workflow not found")
         return repository.get_replan_events(session, workflow_id)
+
+
+@router.get("/router-models")
+def get_router_models() -> list[dict]:
+    """Every trained router model (Section 15G.2), in whatever rollout stage
+    it's in -- shadow, active, or retired (Section 15D.3).
+    """
+    with get_session() as session:
+        return repository.list_router_models(session)
+
+
+@router.post("/admin/router/models/{model_version}/activate")
+def activate_router_model(model_version: str) -> dict:
+    """Section 15H.2's own named endpoint: promotes a model to "active"
+    (Section 15D.3's rollout stage 3/4) and retires whatever was active
+    before it, keeping the single-active invariant on a real promotion even
+    though the DB schema itself doesn't enforce it. Does not, by itself,
+    change which `routing_mode` any given workflow run actually uses --
+    that's still passed explicitly to `run_workflow` by whoever starts it.
+    """
+    with get_session() as session:
+        target = repository.get_router_model(session, model_version)
+        if target is None:
+            raise HTTPException(status_code=404, detail="model_version not found")
+
+        previous_active = repository.get_active_router_model(session)
+        if previous_active is not None and previous_active["model_version"] != model_version:
+            repository.set_router_model_status(session, previous_active["model_version"], "retired")
+        repository.set_router_model_status(session, model_version, "active")
+        return repository.get_router_model(session, model_version)

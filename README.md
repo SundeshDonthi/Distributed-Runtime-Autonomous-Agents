@@ -158,8 +158,83 @@ Tracking the project description's Section 15J roadmap (Phases 1-9).
     contaminating whichever test ran next in the same process (and, in a
     real deployment, poisoning a restart). Fixed by unregistering each
     MCP-discovered tool on shutdown, not just disconnecting.
-- Phase 7 (train the neural router), 8 (real multi-process distribution),
-  9 (C++): not started yet.
+- **Phase 7 -- Train and deploy neural router: done.**
+  - **The scorer** (`runtime/routing/neural.py`): logistic regression,
+    implemented from scratch (no sklearn/pytorch, per the project's own
+    "systems infrastructure, not a wrapper" framing) over the same five
+    features `build_feature_vector` already logged in Phase 6 --
+    `NeuralScorer` is a frozen dataclass of learned `weights`/`bias` plus
+    `feature_means`/`feature_stds` for standardization, tagged with
+    `model_version`/`feature_version`/`training_dataset_version` so a stored
+    model can always be checked against the features it was actually trained
+    on. This is the honest version of Section 15C.1's "text encoder + MLP":
+    there's no real text signal in this project to encode, so a from-scratch
+    linear scorer over structured features is what that section degrades to
+    here rather than a decorative network with nothing to learn from.
+  - **Training and evaluation are separate code paths**
+    (`runtime/training/train.py`, `runtime/training/evaluate.py`):
+    `train_router_model` reads *only* the `"train"` split; evaluation
+    (`evaluate_against_heuristic`, calibration + agreement rate + accuracy)
+    and `compare_policy_success_rates` read only `"test"`. Calibration
+    (`runtime/training/calibrate.py`) reports Expected Calibration Error and
+    Brier score, gated on a minimum sample count, so "calibrated" is a
+    computed claim, not an assumption.
+  - **`benchmarks/train_and_evaluate_router.py`** runs the full pipeline
+    end to end and reports real numbers, not illustrative ones: 150 examples,
+    ECE 0.067 (calibrated), 88.9% accuracy@0.5, and -- the actually meaningful
+    result -- the neural model's default pick had a 100% empirical success
+    rate on held-out data versus the heuristic's pick at 86.5%, despite a
+    measured agreement rate of 0.0 between the two policies' top choices.
+    That last number looked like a bug at first; it wasn't -- it's the
+    dataset's cold-start exploration data genuinely supporting a different
+    top pick than the heuristic's static priors would choose, which is the
+    whole reason to train a model instead of trusting the heuristic forever.
+    One caveat worth keeping honest: `observed_reliability`'s learned weight
+    came out negative, most likely multicollinearity with
+    `static_reliability` on a dataset this small, not a real inverse
+    relationship -- a larger/more diverse training set is the real fix, not
+    a feature removed to make the sign look right.
+  - **Shadow and active routing modes, with guarded fallback**
+    (`runtime/routing/dispatch.py`'s `resolve_task_tool`, threaded through
+    `runtime/scheduler/scheduler.py`): heuristic ranking is always computed
+    as the permanent fallback (Section 15A.1). In `"shadow"` mode the neural
+    scorer's predictions are logged (`neural_score` on each
+    `routing_candidates` row) but never change what actually runs. In
+    `"active"` mode the neural top pick is used only if a model is loaded,
+    its `feature_version` matches, and its confidence clears
+    `confidence_threshold` (default 0.6); otherwise dispatch falls back to
+    the heuristic pick and records why (`fallback_reason` on
+    `routing_decisions`). Epsilon-greedy exploration, when it fires, still
+    overrides both policies, exactly as it did before a neural model existed.
+  - **Model lifecycle via the API**: a `router_models` table
+    (`runtime/state/orm.py`) tracks each trained model's artifact and
+    rollout `status` (`shadow` -> `active` -> `retired`, Section 15D.3).
+    `GET /router-models` lists them; `POST
+    /admin/router/models/{model_version}/activate` promotes one to active
+    and retires whatever was active before it, enforcing the single-active
+    invariant at the API layer (`runtime/api/routes.py`). Activating a model
+    doesn't by itself change any workflow's `routing_mode` -- that's still
+    an explicit argument to `run_workflow`, matching how `routing_mode`
+    already worked before this table existed.
+  - **A real, long-latent bug caught here**: `tests/test_api_smoke.py` had
+    never actually run against an isolated database, since the file was
+    first written. It tried to point itself at a throwaway SQLite file via
+    `os.environ.setdefault("DATABASE_URL", ...)`, but `tests/conftest.py`
+    imports `runtime.state.db` at collection time -- which pytest does
+    unconditionally, even for a single targeted test -- so `engine`/
+    `SessionLocal` were already bound to the real local Postgres default
+    before this file's own setup code ever ran. Every test in it, across
+    every phase, had silently been reading and writing the real dev
+    `agent_runtime` Postgres database. Caught because
+    `test_router_models_lifecycle_through_the_api` only failed when run as
+    part of the full suite, and confirmed by inspecting Postgres directly
+    with `psql` and watching rows land there from a supposedly-isolated
+    test. Fixed by rewriting the file around a `client` fixture that
+    monkeypatches `runtime.state.db`'s `engine`/`SessionLocal` directly --
+    the same pattern `conftest.py`'s own `db_session` fixture already used
+    correctly -- which sidesteps the import-order race instead of trying to
+    win it.
+- Phase 8 (real multi-process distribution), 9 (C++): not started yet.
 
 No LLM in the planner yet (`runtime/planner/planner.py` is still rule-based
 -- see its docstring); that's intentionally decoupled from the rest of this

@@ -10,6 +10,7 @@ from runtime.state.orm import (
     IdempotencyLedgerRow,
     OutboxEventRow,
     ReplanEventRow,
+    RouterModelRow,
     RoutingCandidateRow,
     RoutingDecisionRow,
     RoutingOutcomeRow,
@@ -208,14 +209,21 @@ def create_routing_decision(
     weights: dict,
     was_exploration: bool = False,
     model_version: str = "heuristic-v1",
+    fallback_reason: str | None = None,
+    neural_scores: dict[str, float] | None = None,
 ) -> str:
     """Persists a routing decision and the full ranked candidate set (not
     just the winner -- Section 15G.2), each with its feature snapshot
     (Section 15D.1) frozen at decision time. `selected_tool` is passed
     explicitly rather than assumed to be `ranked_candidates[0]`, since an
     exploratory decision picks something other than the top-ranked candidate
-    on purpose. Returns the decision id so the caller can attach the
-    eventual outcome once the chosen tool has run.
+    on purpose. `ranked_candidates`' score is always the heuristic's score,
+    regardless of which model actually decided -- `neural_scores` (keyed by
+    tool name) is a separate, optional annotation so a decision's meaning of
+    "score" never depends on which routing mode produced it. `fallback_reason`
+    is set only when a neural model was asked to decide but the guarded
+    fallback (Section 15A.1) kicked in instead. Returns the decision id so
+    the caller can attach the eventual outcome once the chosen tool has run.
     """
     decision = RoutingDecisionRow(
         task_id=task_id,
@@ -225,10 +233,12 @@ def create_routing_decision(
         weights=weights,
         selected_tool=selected_tool,
         was_exploration=was_exploration,
+        fallback_reason=fallback_reason,
     )
     session.add(decision)
     session.flush()
 
+    neural_scores = neural_scores or {}
     for rank, (tool_name, score, features) in enumerate(ranked_candidates):
         session.add(
             RoutingCandidateRow(
@@ -238,6 +248,7 @@ def create_routing_decision(
                 rank=rank,
                 features=features,
                 feature_version=features.get("feature_version", ""),
+                neural_score=neural_scores.get(tool_name),
             )
         )
     session.flush()
@@ -282,6 +293,7 @@ def _routing_decision_dict(row: RoutingDecisionRow) -> dict:
         "weights": row.weights,
         "selected_tool": row.selected_tool,
         "was_exploration": row.was_exploration,
+        "fallback_reason": row.fallback_reason,
         "candidates": [
             {
                 "tool_name": c.tool_name,
@@ -289,6 +301,7 @@ def _routing_decision_dict(row: RoutingDecisionRow) -> dict:
                 "rank": c.rank,
                 "features": c.features,
                 "feature_version": c.feature_version,
+                "neural_score": c.neural_score,
             }
             for c in sorted(row.candidates, key=lambda c: c.rank)
         ],
@@ -503,3 +516,75 @@ def get_replan_events(session: Session, workflow_id: str) -> list[dict]:
         }
         for row in session.scalars(stmt).all()
     ]
+
+
+# -- Trained router models (Section 15G.2's `router_models`, Phase 7) --
+
+
+def save_router_model(
+    session: Session,
+    model_version: str,
+    feature_version: str,
+    training_dataset_version: str,
+    artifact: dict,
+    status: str = "shadow",
+) -> str:
+    row = RouterModelRow(
+        model_version=model_version,
+        feature_version=feature_version,
+        training_dataset_version=training_dataset_version,
+        artifact=artifact,
+        status=status,
+    )
+    session.add(row)
+    session.flush()
+    return row.id
+
+
+def get_router_model(session: Session, model_version: str) -> dict | None:
+    row = session.scalar(select(RouterModelRow).where(RouterModelRow.model_version == model_version))
+    return _router_model_dict(row) if row is not None else None
+
+
+def get_active_router_model(session: Session) -> dict | None:
+    row = session.scalar(select(RouterModelRow).where(RouterModelRow.status == "active"))
+    return _router_model_dict(row) if row is not None else None
+
+
+def set_router_model_status(session: Session, model_version: str, status: str) -> None:
+    """Promotes/retires a model (Section 15D.3's rollout stages). Does not
+    enforce "exactly one active" at the DB level -- callers that want a
+    strict single-active invariant should retire the previous active model
+    in the same transaction as promoting the new one.
+    """
+    row = session.scalar(select(RouterModelRow).where(RouterModelRow.model_version == model_version))
+    if row is None:
+        raise ValueError(f"unknown model_version {model_version}")
+    row.status = status
+    session.flush()
+
+
+def set_router_model_calibration(session: Session, model_version: str, is_calibrated: bool) -> None:
+    row = session.scalar(select(RouterModelRow).where(RouterModelRow.model_version == model_version))
+    if row is None:
+        raise ValueError(f"unknown model_version {model_version}")
+    row.is_calibrated = is_calibrated
+    session.flush()
+
+
+def list_router_models(session: Session) -> list[dict]:
+    stmt = select(RouterModelRow).order_by(RouterModelRow.created_at)
+    return [_router_model_dict(row) for row in session.scalars(stmt).all()]
+
+
+def _router_model_dict(row: RouterModelRow) -> dict:
+    return {
+        "id": row.id,
+        "model_version": row.model_version,
+        "feature_version": row.feature_version,
+        "training_dataset_version": row.training_dataset_version,
+        "artifact": row.artifact,
+        "status": row.status,
+        "is_calibrated": row.is_calibrated,
+        "created_at": row.created_at,
+    }

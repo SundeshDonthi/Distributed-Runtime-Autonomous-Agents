@@ -1,16 +1,46 @@
 from __future__ import annotations
 
 import random
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
 from runtime.models.task import Task, TaskStatus
-from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights, rank_candidates_with_details
+from runtime.routing.heuristic import (
+    DEFAULT_WEIGHTS,
+    FEATURE_VERSION,
+    RouterWeights,
+    rank_candidates_with_details,
+)
 from runtime.routing.history import get_observed_stats_for_capability
+from runtime.routing.neural import NeuralScorer, predict_proba
 from runtime.state import repository
 from runtime.tools.registry import tools_for_capability
 
 __all__ = ["resolve_task_tool", "record_outcome"]
+
+RoutingMode = Literal["heuristic", "shadow", "active"]
+DEFAULT_CONFIDENCE_THRESHOLD = 0.6
+
+
+def _neural_scores_for(
+    router_model: NeuralScorer, ranked: list[tuple]
+) -> dict[str, float] | None:
+    """Scores every eligible candidate under the neural model. Returns None
+    (rather than raising) if the model's feature schema doesn't match what's
+    being logged today (Section 15D.2: a model trained on a stale feature
+    version shouldn't be trusted blindly -- its numbers would silently mean
+    something different from what the caller assumes) or if inference itself
+    fails for any reason -- Section 15A.1's "on... invalid candidate, use the
+    deterministic baseline" extends naturally to "on error, don't propagate
+    it into dispatch."
+    """
+    if router_model.feature_version != FEATURE_VERSION:
+        return None
+    try:
+        return {tool.name: predict_proba(router_model, features) for tool, _score, features in ranked}
+    except Exception:  # noqa: BLE001 - any inference failure just means "no neural scores"
+        return None
 
 
 def resolve_task_tool(
@@ -19,6 +49,9 @@ def resolve_task_tool(
     weights: RouterWeights = DEFAULT_WEIGHTS,
     explore_probability: float = 0.0,
     rng: random.Random | None = None,
+    router_model: NeuralScorer | None = None,
+    routing_mode: RoutingMode = "heuristic",
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> str | None:
     """Routing step of dispatch (Section 15A.1: the router "ranks eligible
     tool + strategy pairs for an already-READY task" -- a step the scheduler
@@ -31,13 +64,27 @@ def resolve_task_tool(
     execute it unchanged, persists the decision + full candidate set, and
     returns the decision id so the eventual outcome can be attached to it.
 
-    `explore_probability` > 0 occasionally picks a uniformly random candidate
-    instead of the heuristic's top-ranked one (epsilon-greedy exploration).
-    With it at the default 0, a heuristic that always wins would mean the
-    runtime never logs outcomes for its losing candidates -- useful for live
-    traffic, but it would make for a biased training set (Section 15D.2).
-    Dataset generation (Section 15C.3's "cold start") should set this above
-    zero; live routing should generally leave it at 0.
+    The heuristic ranking is *always* computed, regardless of `routing_mode`
+    -- it's both the Section 15A.1 fallback and, in "heuristic" mode, the
+    only thing that ever decides:
+
+    - "heuristic" (default): unaffected by `router_model` even if one is
+      passed. The permanent baseline (Section 15A.1).
+    - "shadow" (Section 15D.3 stage 2): the heuristic still decides, but if
+      `router_model` is given, every candidate's neural score is also
+      computed and logged -- collecting evidence of how the model *would*
+      have performed, without it influencing anything yet.
+    - "active" (Section 15D.3 stage 3/4): the neural model's top-ranked
+      candidate is used instead, but only if a model was actually supplied,
+      its top pick clears `confidence_threshold`, and that pick is among the
+      eligible candidates -- otherwise this falls back to the heuristic's
+      choice and records why in `fallback_reason` (Section 15G.2).
+
+    `explore_probability` > 0 occasionally overrides whichever choice was
+    made (heuristic or neural) with a uniformly random candidate instead
+    (epsilon-greedy exploration) -- this is about data collection, not about
+    which policy nominally decided, so it applies the same way regardless of
+    `routing_mode`.
     """
     task_input = task.input or {}
     if task_input.get("tool") is not None:
@@ -50,9 +97,34 @@ def resolve_task_tool(
     candidates = tools_for_capability(capability)
     observed = get_observed_stats_for_capability(session, candidates)
     ranked = rank_candidates_with_details(capability, weights, observed)
+    eligible_names = {tool.name for tool, _score, _features in ranked}
+
+    neural_scores: dict[str, float] = {}
+    fallback_reason: str | None = None
+    selected_tool = ranked[0][0]
+    model_version_used = "heuristic-v1"
+
+    if routing_mode in ("shadow", "active") and router_model is not None:
+        computed = _neural_scores_for(router_model, ranked)
+        if computed is None:
+            if routing_mode == "active":
+                fallback_reason = "feature_version_mismatch_or_inference_error"
+        else:
+            neural_scores = computed
+            if routing_mode == "active":
+                neural_top_name = max(neural_scores, key=neural_scores.get)
+                neural_top_confidence = neural_scores[neural_top_name]
+                if neural_top_name not in eligible_names:
+                    fallback_reason = "invalid_candidate"
+                elif neural_top_confidence < confidence_threshold:
+                    fallback_reason = "low_confidence"
+                else:
+                    selected_tool = next(t for t, _, _ in ranked if t.name == neural_top_name)
+                    model_version_used = router_model.model_version
+    elif routing_mode == "active" and router_model is None:
+        fallback_reason = "model_missing"
 
     was_exploration = False
-    selected_tool = ranked[0][0]
     if explore_probability > 0 and len(ranked) > 1:
         rng = rng or random.Random()
         if rng.random() < explore_probability:
@@ -64,6 +136,8 @@ def resolve_task_tool(
             # every logged decision as equally representative.
             selected_tool = rng.choice(ranked)[0]
             was_exploration = True
+            fallback_reason = None  # exploration is why this was picked, not a fallback
+            model_version_used = "heuristic-v1"  # exploration isn't the neural model's decision
 
     decision_id = repository.create_routing_decision(
         session=session,
@@ -79,6 +153,9 @@ def resolve_task_tool(
             "cost": weights.cost,
         },
         was_exploration=was_exploration,
+        model_version=model_version_used,
+        fallback_reason=fallback_reason,
+        neural_scores=neural_scores,
     )
 
     task.input = {**task_input, "tool": selected_tool.name}

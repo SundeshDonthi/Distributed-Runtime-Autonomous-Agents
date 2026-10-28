@@ -114,6 +114,29 @@ class ReplanEventRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class RouterModelRow(Base):
+    """Section 15G.2's `router_models`: a trained scorer's weights, versioned
+    and auditable. `status` tracks Section 15D.3's rollout stages -- "shadow"
+    (logged, never decides), "active" (the current decision-maker in "active"
+    routing mode), "retired" (superseded, kept for the audit trail). Exactly
+    one row should be "active" at a time, enforced by application logic
+    rather than a DB constraint (a brief window with zero or two during a
+    promotion is tolerable; a stale CHECK constraint blocking a legitimate
+    promotion is not).
+    """
+
+    __tablename__ = "router_models"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_new_id)
+    model_version: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    feature_version: Mapped[str] = mapped_column(String, nullable=False)
+    training_dataset_version: Mapped[str] = mapped_column(String, nullable=False)
+    artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="shadow")
+    is_calibrated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ToolCallRow(Base):
     """One row per actual tool invocation (Section 11's ToolCall / Section
     15G.1). This is the ground truth a router's "prior outcomes" are computed
@@ -161,6 +184,12 @@ class RoutingDecisionRow(Base):
     # tested in controlled evaluations") -- lets a training step distinguish
     # genuinely exploratory data from the heuristic's own greedy choices.
     was_exploration: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Section 15G.2's own schema names this column. Set only when a neural
+    # model was asked to decide but the guarded fallback kicked in instead
+    # (Section 15A.1: "on timeout, low confidence, missing model, or invalid
+    # candidate, use the deterministic baseline") -- None whenever the
+    # heuristic was simply the one in charge to begin with.
+    fallback_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     candidates: Mapped[list["RoutingCandidateRow"]] = relationship(
@@ -190,6 +219,10 @@ class RoutingCandidateRow(Base):
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     features: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     feature_version: Mapped[str] = mapped_column(String, nullable=False, default="")
+    # Populated whenever a neural model was consulted for this decision
+    # (shadow or active mode), regardless of which score actually won --
+    # shadow mode's entire point is logging this without using it.
+    neural_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     decision: Mapped["RoutingDecisionRow"] = relationship(back_populates="candidates")
 

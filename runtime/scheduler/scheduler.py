@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from runtime.models.task import Task, TaskStatus
 from runtime.models.workflow import WorkflowStatus
 from runtime.planner.planner import Planner, RuleBasedPlanner
-from runtime.routing.dispatch import record_outcome, resolve_task_tool
+from runtime.routing.dispatch import DEFAULT_CONFIDENCE_THRESHOLD, RoutingMode, record_outcome, resolve_task_tool
 from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights
+from runtime.routing.neural import NeuralScorer
 from runtime.recovery import replanner, retry
 from runtime.scheduler import idempotency, leases
 from runtime.scheduler.dag import (
@@ -110,8 +111,11 @@ async def run_workflow_async(
     lease_seconds: float = leases.DEFAULT_LEASE_SECONDS,
     heartbeat_interval: float | None = None,
     planner: Planner | None = None,
+    router_model: NeuralScorer | None = None,
+    routing_mode: RoutingMode = "heuristic",
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> WorkflowStatus:
-    """The scheduler loop (Phases 2-5). Each round's READY tasks are pushed
+    """The scheduler loop (Phases 2-7). Each round's READY tasks are pushed
     onto a Redis-backed queue (Section 5.7) and pulled by up to
     `max_concurrency` worker loops; falls back to direct dispatch if Redis is
     unreachable (Section 15A.1). On top of Phase 2's concurrency, this adds
@@ -138,7 +142,14 @@ async def run_workflow_async(
       (Section 5.10) triggers the replanner instead of an ordinary retry:
       new prerequisite task(s) are spliced into the graph, bounded by the
       task's own `max_replans` so a prerequisite that never resolves can't
-      mutate the graph forever.
+      mutate the graph forever;
+    - a capability-routed task can be routed by a trained neural model
+      instead of the heuristic alone (Section 15C/15D.3): `routing_mode`
+      "shadow" logs the model's predictions without using them, "active"
+      uses its top pick when confident, with a guarded fallback to the
+      heuristic (Section 15A.1) recorded via `fallback_reason` otherwise.
+      Left at "heuristic" (the default), behavior is unaffected by
+      `router_model` even if one is passed.
     """
     worker = worker or Worker()
     planner = planner or RuleBasedPlanner()
@@ -204,7 +215,14 @@ async def run_workflow_async(
                 for task in to_process
                 if (
                     decision_id := resolve_task_tool(
-                        session, task, routing_weights, explore_probability, rng
+                        session,
+                        task,
+                        routing_weights,
+                        explore_probability,
+                        rng,
+                        router_model,
+                        routing_mode,
+                        confidence_threshold,
                     )
                 )
                 is not None
@@ -308,6 +326,9 @@ def run_workflow(
     lease_seconds: float = leases.DEFAULT_LEASE_SECONDS,
     heartbeat_interval: float | None = None,
     planner: Planner | None = None,
+    router_model: NeuralScorer | None = None,
+    routing_mode: RoutingMode = "heuristic",
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> WorkflowStatus:
     """Sync wrapper over `run_workflow_async` for callers (the FastAPI
     background task, the existing test suite) that aren't already inside an
@@ -327,5 +348,8 @@ def run_workflow(
             lease_seconds,
             heartbeat_interval,
             planner,
+            router_model,
+            routing_mode,
+            confidence_threshold,
         )
     )
