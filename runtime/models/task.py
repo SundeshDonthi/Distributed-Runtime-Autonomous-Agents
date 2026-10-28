@@ -30,7 +30,23 @@ class Task(BaseModel):
     input: dict | None = None
     output: dict | None = None
     error: str | None = None
+    error_category: str | None = None  # "transient" | "permanent", set by the worker
     retry_count: int = 0
+    max_retries: int = 3
+    retry_after: datetime | None = None
     created_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+    # Leasing/fencing (Section 12/13/15F.4) -- see TaskRow for the rationale.
+    lease_owner: str | None = None
+    lease_expires_at: datetime | None = None
+    fencing_token: int = 0
+
+    @property
+    def idempotency_key(self) -> str:
+        """Stable per-task key (workflow_id:task_id), not attempt-based --
+        Section 15F.3 explicitly warns an attempt-based key can't dedupe
+        retries of the same logical operation.
+        """
+        return f"{self.workflow_id}:{self.id}"

@@ -11,6 +11,18 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def ensure_aware(dt: datetime | None) -> datetime | None:
+    """SQLite has no native timezone-aware datetime type, so a `DateTime
+    (timezone=True)` column round-trips as a naive datetime there even though
+    Postgres preserves it correctly -- comparing that naive value against
+    `utcnow()` (always aware) raises TypeError. Assumes naive means UTC,
+    which is the only thing `utcnow()` ever writes in the first place.
+    """
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _new_id() -> str:
     return uuid.uuid4().hex
 
@@ -44,10 +56,23 @@ class TaskRow(Base):
     input: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_category: Mapped[str | None] = mapped_column(String, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3)
+    retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Leasing/fencing (Section 12/13/15F.4): `lease_owner`/`lease_expires_at`
+    # mark a task as claimed by a specific worker for a bounded window;
+    # `fencing_token` increments on every claim so a worker whose lease has
+    # since expired can be detected and refused when it tries to commit a
+    # stale result (Section 15F.4: "a worker may commit task completion only
+    # when its token and lease ownership still match the current record").
+    lease_owner: Mapped[str | None] = mapped_column(String, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fencing_token: Mapped[int] = mapped_column(Integer, default=0)
 
     workflow: Mapped["WorkflowRow"] = relationship(back_populates="tasks")
     dependencies: Mapped[list["TaskDependencyRow"]] = relationship(
@@ -139,6 +164,65 @@ class RoutingCandidateRow(Base):
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
 
     decision: Mapped["RoutingDecisionRow"] = relationship(back_populates="candidates")
+
+
+class IdempotencyLedgerRow(Base):
+    """Section 15F.3's "durable operation ledger": one row per logical
+    operation, keyed by `workflow_id:task_id` (not attempt number -- the doc
+    explicitly warns "a key incorporating the attempt number is unsuitable
+    for deduplicating retries of the same logical side effect"). A retry that
+    finds a COMPLETED entry here reuses its result instead of re-invoking the
+    tool. This closes the gap for same-process re-dispatch; it cannot by
+    itself make a crash between an external call succeeding and this row
+    being committed safe -- only a provider-side idempotency key can (Section
+    15K: "never claim exactly-once external effects without provider
+    guarantees or reconciliation").
+    """
+
+    __tablename__ = "idempotency_ledger"
+
+    idempotency_key: Mapped[str] = mapped_column(String, primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("workflows.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # IN_PROGRESS | COMPLETED | FAILED
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class OutboxEventRow(Base):
+    """Section 15F.4/15G.2's outbox pattern: a task's state transition and
+    the event describing it are written in the same commit, so a crash can
+    never leave one persisted without the other -- "dispatch notifications
+    asynchronously" by having a separate consumer poll/drain this table,
+    rather than trying to also deliver a webhook/SSE push within the same
+    transaction as the state change.
+    """
+
+    __tablename__ = "outbox_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    aggregate_id: Mapped[str] = mapped_column(String, nullable=False)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExternalChargeRow(Base):
+    """Stands in for a real third-party system's OWN idempotency ledger --
+    deliberately a separate table from `idempotency_ledger` above, which is
+    *our* bookkeeping. This one simulates "the external API itself refuses to
+    double-charge a given idempotency key," which is the only thing that can
+    make a retried side effect genuinely safe (Section 15F.3); it's what the
+    `idempotent_charge` demo tool (runtime/tools/registry.py) checks against.
+    """
+
+    __tablename__ = "external_charges"
+
+    idempotency_key: Mapped[str] = mapped_column(String, primary_key=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class RoutingOutcomeRow(Base):

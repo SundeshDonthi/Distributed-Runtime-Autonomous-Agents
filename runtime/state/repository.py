@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session, selectinload
 from runtime.models.task import Task, TaskStatus
 from runtime.models.workflow import Workflow, WorkflowStatus, WorkflowWithTasks
 from runtime.state.orm import (
+    ExternalChargeRow,
+    IdempotencyLedgerRow,
+    OutboxEventRow,
     RoutingCandidateRow,
     RoutingDecisionRow,
     RoutingOutcomeRow,
@@ -13,6 +16,8 @@ from runtime.state.orm import (
     TaskRow,
     ToolCallRow,
     WorkflowRow,
+    ensure_aware,
+    utcnow,
 )
 
 
@@ -27,10 +32,16 @@ def _task_from_row(row: TaskRow) -> Task:
         input=row.input,
         output=row.output,
         error=row.error,
+        error_category=row.error_category,
         retry_count=row.retry_count,
-        created_at=row.created_at,
-        started_at=row.started_at,
-        completed_at=row.completed_at,
+        max_retries=row.max_retries,
+        retry_after=ensure_aware(row.retry_after),
+        created_at=ensure_aware(row.created_at),
+        started_at=ensure_aware(row.started_at),
+        completed_at=ensure_aware(row.completed_at),
+        lease_owner=row.lease_owner,
+        lease_expires_at=ensure_aware(row.lease_expires_at),
+        fencing_token=row.fencing_token,
     )
 
 
@@ -61,6 +72,7 @@ def save_tasks(session: Session, tasks: list[Task]) -> None:
                 required_capabilities=task.required_capabilities,
                 status=task.status.value,
                 input=task.input,
+                max_retries=task.max_retries,
             )
         )
     session.flush()
@@ -78,8 +90,6 @@ def update_workflow_status(
         raise ValueError(f"unknown workflow_id {workflow_id}")
     row.status = status.value
     if completed:
-        from runtime.state.orm import utcnow
-
         row.completed_at = utcnow()
 
 
@@ -91,9 +101,34 @@ def update_task(session: Session, task: Task) -> None:
     row.input = task.input
     row.output = task.output
     row.error = task.error
+    row.error_category = task.error_category
     row.retry_count = task.retry_count
+    row.max_retries = task.max_retries
+    row.retry_after = task.retry_after
     row.started_at = task.started_at
     row.completed_at = task.completed_at
+    row.lease_owner = task.lease_owner
+    row.lease_expires_at = task.lease_expires_at
+    row.fencing_token = task.fencing_token
+
+
+def commit_task_if_fencing_valid(session: Session, task: Task) -> bool:
+    """Section 15F.4: "A worker may commit task completion only when its
+    token and lease ownership still match the current record. Expired
+    workers must not overwrite newer attempt results." Compares `task`'s
+    fencing token/lease owner against the current row before applying the
+    update; returns whether it was applied. A task that was never leased
+    this round (its fencing fields are whatever was already on the row)
+    trivially passes, so this is safe to call for every task uniformly, not
+    just ones that went through `leases.acquire_lease`.
+    """
+    row = session.get(TaskRow, task.id)
+    if row is None:
+        raise ValueError(f"unknown task_id {task.id}")
+    if row.fencing_token != task.fencing_token or row.lease_owner != task.lease_owner:
+        return False
+    update_task(session, task)
+    return True
 
 
 def get_workflow(session: Session, workflow_id: str) -> WorkflowWithTasks | None:
@@ -317,3 +352,75 @@ def get_routing_dataset(session: Session, workflow_id: str | None = None) -> lis
         result["error"] = row.outcome.error
         results.append(result)
     return results
+
+
+# -- Reliability (Section 12/13/15F): idempotency ledger, outbox events --
+
+
+def get_idempotency_entry(session: Session, idempotency_key: str) -> IdempotencyLedgerRow | None:
+    return session.get(IdempotencyLedgerRow, idempotency_key)
+
+
+def upsert_idempotency_entry(
+    session: Session,
+    idempotency_key: str,
+    workflow_id: str,
+    task_id: str,
+    status: str,
+    result: dict | None = None,
+) -> None:
+    row = session.get(IdempotencyLedgerRow, idempotency_key)
+    if row is None:
+        session.add(
+            IdempotencyLedgerRow(
+                idempotency_key=idempotency_key,
+                workflow_id=workflow_id,
+                task_id=task_id,
+                status=status,
+                result=result,
+            )
+        )
+    else:
+        row.status = status
+        row.result = result
+        row.updated_at = utcnow()
+    session.flush()
+
+
+def record_outbox_event(session: Session, aggregate_id: str, event_type: str, payload: dict) -> None:
+    session.add(OutboxEventRow(aggregate_id=aggregate_id, event_type=event_type, payload=payload))
+    session.flush()
+
+
+def get_undelivered_outbox_events(session: Session, limit: int = 100) -> list[OutboxEventRow]:
+    stmt = (
+        select(OutboxEventRow)
+        .where(OutboxEventRow.delivered_at.is_(None))
+        .order_by(OutboxEventRow.id)
+        .limit(limit)
+    )
+    return list(session.scalars(stmt).all())
+
+
+def mark_outbox_event_delivered(session: Session, event_id: int) -> None:
+    row = session.get(OutboxEventRow, event_id)
+    if row is not None:
+        row.delivered_at = utcnow()
+        session.flush()
+
+
+# -- Simulates a third-party system's own idempotency support, for the
+# `idempotent_charge` demo tool (runtime/tools/registry.py) --
+
+
+def get_external_charge(session: Session, idempotency_key: str) -> ExternalChargeRow | None:
+    return session.get(ExternalChargeRow, idempotency_key)
+
+
+def record_external_charge(session: Session, idempotency_key: str, amount: float) -> None:
+    session.add(ExternalChargeRow(idempotency_key=idempotency_key, amount=amount))
+    session.flush()
+
+
+def count_external_charges(session: Session) -> int:
+    return len(session.scalars(select(ExternalChargeRow)).all())

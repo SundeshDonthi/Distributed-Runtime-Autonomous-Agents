@@ -49,7 +49,54 @@ Tracking the project description's Section 15J roadmap (Phases 1-9).
     with zero scheduler/routing changes -- Phase 3's own definition of done.
   - **Input schema validation** (`jsonschema`, wired into `Worker`) runs for
     every tool call, in-process or MCP-discovered, before it's made.
-- **Phase 4 -- Reliability: in progress.** See below.
+- **Phase 4 -- Reliability: done.**
+  - **Real checkpointing, fixed from a genuine bug**: the scheduler used to
+    run an entire workflow inside one commit, so a real process crash would
+    have rolled back *everything*, including tasks that had already finished
+    -- directly contradicting Section 5.8. Commits now happen after every
+    meaningful step (lease acquisition, each round's results, cancellations,
+    reclaims), so a crash only costs whatever was genuinely in flight.
+  - **Leases + fencing tokens** (`runtime/scheduler/leases.py`, Section
+    12/15F.4): a task is claimed with an owner, an expiry, and a
+    monotonically incrementing fencing token before it's dispatched; a
+    result can only be committed if that token still matches the current row
+    (`repository.commit_task_if_fencing_valid`) -- a worker whose claim has
+    since been superseded can't overwrite a newer attempt.
+  - **Lease reclaim + heartbeats** (Section 13): a lease that expired before
+    its owner reported back is detected and reassigned at the start of every
+    round; a background heartbeat renews the lease of a task that's
+    genuinely still running, so a slow-but-healthy task isn't mistaken for
+    an orphaned one.
+  - **Retry classification + exponential backoff** (`runtime/scheduler/
+    retry.py`, Section 5.9): a failure is tagged transient or permanent by
+    `Worker` (schema/unknown-tool errors are permanent; a tool's own call
+    failing is transient) and only transient ones are retried, with the
+    doc's own 1s/2s/4s backoff, bounded by `max_retries`.
+  - **Idempotency ledger** (`runtime/scheduler/idempotency.py`, Section
+    15F.3): a task whose logical operation already completed on a prior
+    attempt is served its cached result instead of being re-dispatched.
+    Two demo tools show the honest limitation this can't paper over:
+    `idempotent_charge` (simulates an external API with its own idempotency
+    support -- a duplicate call is genuinely suppressed) versus
+    `naive_charge` (no such support -- a duplicate call genuinely duplicates
+    the side effect, Section 15K's "exactly-once is limited by external tool
+    semantics" made concrete rather than just asserted).
+  - **Outbox events** (Section 15F.4/15G.2): every task transition is
+    recorded in the same commit as the state change itself.
+  - **A real chaos test** (`tests/test_chaos_recovery.py`): spawns an actual
+    subprocess, lets one task complete while a second is mid-flight,
+    SIGKILLs it, and verifies a fresh run recovers correctly -- the completed
+    task is untouched, the orphaned one gets reclaimed and finishes.
+  - **Known scope boundary**: commits are per-*round*, not per-task within a
+    round (concurrent tasks in one round only finish together via one
+    `asyncio.gather`, and only one thing may safely touch the DB session
+    while dispatch is in flight -- see `scheduler.py`'s docstring). A slow
+    task sharing a round with fast ones delays their durability until the
+    round finishes. There's also no real schema-migration tooling yet
+    (`Base.metadata.create_all` only adds missing tables, not missing
+    columns on existing ones) -- a schema change on a real deployment
+    currently needs a manual drop/recreate, fine for this dev database, not
+    for anything with data worth keeping.
 - Phases 5, 6 (feature snapshots + held-out splits), 7 (train the neural
   router), 8 (real multi-process distribution), 9 (C++): not started yet.
 
@@ -116,8 +163,10 @@ runtime/
   api/         FastAPI app/routes (/workflows, /tools, /workflows/{id}/routing-decisions)
   models/      Pydantic domain models (Workflow, Task)
   planner/     Objective -> task graph, plus DAG validation
-  scheduler/   Dependency-ready-task computation, the async run loop, and the
-               Redis-backed ready-task queue
+  scheduler/   dag.py (readiness), scheduler.py (the async run loop + Redis
+               queue), leases.py (claim/fencing/reclaim), retry.py
+               (transient/permanent classification + backoff),
+               idempotency.py (cached-result short-circuit)
   workers/     Task execution (async, offloaded to a thread per tool call) --
                only ever runs an already-resolved tool, never routes itself;
                validates args against the tool's JSON schema before calling it
@@ -132,6 +181,18 @@ runtime/
 mcp_servers/   A real (demo) MCP server, launched as a subprocess by
                runtime/tools/mcp_client.py -- proves genuine dynamic tool
                discovery rather than a hardcoded registry
+scripts/       chaos_run_workflow.py -- the subprocess entry point the chaos
+               recovery test kills mid-execution
 tests/
 benchmarks/    Standalone scripts proving systems-level claims (Section 16)
 ```
+
+## Chaos test
+
+```bash
+pytest tests/test_chaos_recovery.py -v
+```
+
+Needs a live Postgres (skips otherwise -- separate OS processes can't share
+an in-memory SQLite DB). Spawns a real subprocess, SIGKILLs it mid-workflow,
+and verifies a fresh run recovers correctly.

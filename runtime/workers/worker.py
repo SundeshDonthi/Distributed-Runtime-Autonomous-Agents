@@ -49,9 +49,23 @@ class Worker:
         except UnknownToolError as exc:
             task.status = TaskStatus.FAILED
             task.error = f"unknown tool: {exc}"
-        except Exception as exc:  # noqa: BLE001 - surfaced via task.error, not raised
+            task.error_category = "permanent"
+        except ValueError as exc:
+            # Schema validation failures and "no resolved tool" are both
+            # about the request being invalid, not the call failing --
+            # retrying an invalid request can't help (Section 5.9: "Invalid
+            # arguments require repair or replanning, not repeated identical
+            # calls").
             task.status = TaskStatus.FAILED
             task.error = str(exc)
+            task.error_category = "permanent"
+        except Exception as exc:  # noqa: BLE001 - surfaced via task.error, not raised
+            # Everything else is presumed to be the tool's own call failing
+            # (timeouts, rate limits, network errors, a simulated upstream
+            # failure) -- Section 5.9's "transient -> retry" bucket.
+            task.status = TaskStatus.FAILED
+            task.error = str(exc)
+            task.error_category = "transient"
         finally:
             task.completed_at = utcnow()
 

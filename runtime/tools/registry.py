@@ -71,12 +71,54 @@ def _make_lookup(name: str, reliability: float, latency_seconds: float) -> ToolF
     return _lookup
 
 
+def _idempotent_charge(args: dict) -> dict:
+    """Simulates a real payment-style external API that supports idempotency
+    keys (Section 15F.3): the *external system itself* refuses to double-
+    charge a given key, which is the only thing that can make a retried
+    side effect genuinely safe. Uses its own session (not the caller's) --
+    a real external API wouldn't share a DB transaction with us either.
+    """
+    from runtime.state import repository
+    from runtime.state.db import get_session
+
+    idempotency_key = args["idempotency_key"]
+    amount = args["amount"]
+    with get_session() as session:
+        existing = repository.get_external_charge(session, idempotency_key)
+        if existing is not None:
+            return {"charged": existing.amount, "duplicate_suppressed": True}
+        repository.record_external_charge(session, idempotency_key, amount)
+        return {"charged": amount, "duplicate_suppressed": False}
+
+
+def _naive_charge(args: dict) -> dict:
+    """The honest counter-example: a tool with no idempotency support at all.
+    Calling it twice for "the same" logical operation charges twice -- Section
+    15K's "exactly-once behavior is limited by external tool semantics" made
+    concrete, not just asserted.
+    """
+    from runtime.state import repository
+    from runtime.state.db import get_session
+
+    amount = args["amount"]
+    with get_session() as session:
+        import uuid
+
+        repository.record_external_charge(session, uuid.uuid4().hex, amount)
+    return {"charged": amount, "duplicate_suppressed": False}
+
+
 _TEXT_ARG_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}}
 _DELAY_ARG_SCHEMA = {
     "type": "object",
     "properties": {"seconds": {"type": "number"}, "text": {"type": "string"}},
 }
 _LOOKUP_ARG_SCHEMA = {"type": "object", "properties": {"query": {"type": "string"}}}
+_CHARGE_ARG_SCHEMA = {
+    "type": "object",
+    "properties": {"idempotency_key": {"type": "string"}, "amount": {"type": "number"}},
+    "required": ["amount"],
+}
 
 # Phase 1/2 tools (echo, uppercase, delay) are deterministic and single-option
 # -- there's nothing to route between. `lookup_fast`/`lookup_careful` share
@@ -107,6 +149,24 @@ _REGISTRY: dict[str, ToolMetadata] = {
         reliability=0.99,
         cost_per_call=0.01,
         input_schema=_LOOKUP_ARG_SCHEMA,
+    ),
+    "idempotent_charge": ToolMetadata(
+        name="idempotent_charge",
+        capability="charge",
+        fn=_idempotent_charge,
+        base_latency_seconds=0.0,
+        reliability=1.0,
+        cost_per_call=0.0,
+        input_schema=_CHARGE_ARG_SCHEMA,
+    ),
+    "naive_charge": ToolMetadata(
+        name="naive_charge",
+        capability="charge",
+        fn=_naive_charge,
+        base_latency_seconds=0.0,
+        reliability=1.0,
+        cost_per_call=0.0,
+        input_schema=_CHARGE_ARG_SCHEMA,
     ),
 }
 
