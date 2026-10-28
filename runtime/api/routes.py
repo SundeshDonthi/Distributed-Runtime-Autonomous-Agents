@@ -92,3 +92,16 @@ def get_workflow_routing_decisions(workflow_id: str) -> list[dict]:
         if workflow is None:
             raise HTTPException(status_code=404, detail="workflow not found")
         return repository.get_routing_decisions_for_workflow(session, workflow_id)
+
+
+@router.get("/workflows/{workflow_id}/replan-events")
+def get_workflow_replan_events(workflow_id: str) -> list[dict]:
+    """Every graph mutation (Section 5.10/15J Phase 5) this workflow has gone
+    through: which task was blocked, why, what got inserted, and which plan
+    version it produced.
+    """
+    with get_session() as session:
+        workflow = repository.get_workflow(session, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="workflow not found")
+        return repository.get_replan_events(session, workflow_id)

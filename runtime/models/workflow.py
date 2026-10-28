@@ -20,6 +20,9 @@ class Workflow(BaseModel):
     id: str
     objective: str
     status: WorkflowStatus = WorkflowStatus.PLANNING
+    # Bumped each time the replanner mutates the graph (Section 15G.1's
+    # "plan_version") -- the doc's own name for exactly this.
+    plan_version: int = 1
     created_at: datetime | None = None
     completed_at: datetime | None = None
 

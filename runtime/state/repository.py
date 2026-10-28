@@ -9,6 +9,7 @@ from runtime.state.orm import (
     ExternalChargeRow,
     IdempotencyLedgerRow,
     OutboxEventRow,
+    ReplanEventRow,
     RoutingCandidateRow,
     RoutingDecisionRow,
     RoutingOutcomeRow,
@@ -36,6 +37,8 @@ def _task_from_row(row: TaskRow) -> Task:
         retry_count=row.retry_count,
         max_retries=row.max_retries,
         retry_after=ensure_aware(row.retry_after),
+        replan_count=row.replan_count,
+        max_replans=row.max_replans,
         created_at=ensure_aware(row.created_at),
         started_at=ensure_aware(row.started_at),
         completed_at=ensure_aware(row.completed_at),
@@ -50,6 +53,7 @@ def _workflow_from_row(row: WorkflowRow) -> Workflow:
         id=row.id,
         objective=row.objective,
         status=WorkflowStatus(row.status),
+        plan_version=row.plan_version,
         created_at=row.created_at,
         completed_at=row.completed_at,
     )
@@ -73,12 +77,23 @@ def save_tasks(session: Session, tasks: list[Task]) -> None:
                 status=task.status.value,
                 input=task.input,
                 max_retries=task.max_retries,
+                max_replans=task.max_replans,
             )
         )
     session.flush()
     for task in tasks:
         for dep_id in task.dependencies:
             session.add(TaskDependencyRow(task_id=task.id, depends_on_task_id=dep_id))
+    session.flush()
+
+
+def add_task_dependency(session: Session, task_id: str, depends_on_task_id: str) -> None:
+    """Adds one dependency edge onto an *existing* task -- what the
+    replanner uses to splice a newly inserted prerequisite in front of the
+    task that was blocked on it (Section 5.10), as opposed to `save_tasks`,
+    which is for a brand-new task's initial dependency set.
+    """
+    session.add(TaskDependencyRow(task_id=task_id, depends_on_task_id=depends_on_task_id))
     session.flush()
 
 
@@ -105,6 +120,8 @@ def update_task(session: Session, task: Task) -> None:
     row.retry_count = task.retry_count
     row.max_retries = task.max_retries
     row.retry_after = task.retry_after
+    row.replan_count = task.replan_count
+    row.max_replans = task.max_replans
     row.started_at = task.started_at
     row.completed_at = task.completed_at
     row.lease_owner = task.lease_owner
@@ -424,3 +441,53 @@ def record_external_charge(session: Session, idempotency_key: str, amount: float
 
 def count_external_charges(session: Session) -> int:
     return len(session.scalars(select(ExternalChargeRow)).all())
+
+
+# -- Dynamic replanning (Section 5.10/15J Phase 5) --
+
+
+def bump_plan_version(session: Session, workflow_id: str) -> int:
+    row = session.get(WorkflowRow, workflow_id)
+    if row is None:
+        raise ValueError(f"unknown workflow_id {workflow_id}")
+    row.plan_version += 1
+    session.flush()
+    return row.plan_version
+
+
+def record_replan_event(
+    session: Session,
+    workflow_id: str,
+    blocked_task_id: str,
+    context: str,
+    new_task_ids: list[str],
+    plan_version: int,
+) -> None:
+    session.add(
+        ReplanEventRow(
+            workflow_id=workflow_id,
+            blocked_task_id=blocked_task_id,
+            context=context,
+            new_task_ids=new_task_ids,
+            plan_version=plan_version,
+        )
+    )
+    session.flush()
+
+
+def get_replan_events(session: Session, workflow_id: str) -> list[dict]:
+    stmt = (
+        select(ReplanEventRow)
+        .where(ReplanEventRow.workflow_id == workflow_id)
+        .order_by(ReplanEventRow.id)
+    )
+    return [
+        {
+            "blocked_task_id": row.blocked_task_id,
+            "context": row.context,
+            "new_task_ids": row.new_task_ids,
+            "plan_version": row.plan_version,
+            "created_at": row.created_at,
+        }
+        for row in session.scalars(stmt).all()
+    ]

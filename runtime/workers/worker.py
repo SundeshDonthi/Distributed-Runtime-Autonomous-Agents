@@ -6,7 +6,7 @@ import jsonschema
 
 from runtime.models.task import Task, TaskStatus
 from runtime.state.orm import utcnow
-from runtime.tools.registry import UnknownToolError, get_tool_metadata
+from runtime.tools.registry import MissingPrerequisiteError, UnknownToolError, get_tool_metadata
 
 
 class Worker:
@@ -50,6 +50,16 @@ class Worker:
             task.status = TaskStatus.FAILED
             task.error = f"unknown tool: {exc}"
             task.error_category = "permanent"
+        except MissingPrerequisiteError as exc:
+            # Section 5.10: the tool discovered mid-call that it needs
+            # another piece of information. Not transient (retrying the
+            # identical call won't produce it) and not permanent (the task
+            # itself is still valid, it just needs a prerequisite) -- a third
+            # category the scheduler routes to the replanner instead of
+            # either retry path.
+            task.status = TaskStatus.FAILED
+            task.error = exc.description
+            task.error_category = "needs_replan"
         except ValueError as exc:
             # Schema validation failures and "no resolved tool" are both
             # about the request being invalid, not the call failing --

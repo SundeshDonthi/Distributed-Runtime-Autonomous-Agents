@@ -42,3 +42,21 @@ def test_routing_decisions_endpoint_returns_404_for_unknown_workflow():
     with TestClient(app) as client:
         resp = client.get("/workflows/does_not_exist/routing-decisions")
         assert resp.status_code == 404
+
+
+def test_replan_events_endpoint_returns_empty_list_for_a_workflow_with_no_replans():
+    with TestClient(app) as client:
+        resp = client.post(
+            "/workflows", json={"objective": "Analyze NVIDIA, AMD, and Intel."}
+        )
+        workflow_id = resp.json()["id"]
+
+        events = client.get(f"/workflows/{workflow_id}/replan-events")
+        assert events.status_code == 200
+        assert events.json() == []
+
+
+def test_replan_events_endpoint_returns_404_for_unknown_workflow():
+    with TestClient(app) as client:
+        resp = client.get("/workflows/does_not_exist/replan-events")
+        assert resp.status_code == 404

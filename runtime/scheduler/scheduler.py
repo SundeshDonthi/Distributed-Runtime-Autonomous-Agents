@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from runtime.models.task import Task, TaskStatus
 from runtime.models.workflow import WorkflowStatus
+from runtime.planner.planner import Planner, RuleBasedPlanner
 from runtime.routing.dispatch import record_outcome, resolve_task_tool
 from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights
-from runtime.scheduler import idempotency, leases, retry
+from runtime.recovery import replanner, retry
+from runtime.scheduler import idempotency, leases
 from runtime.scheduler.dag import (
     has_failed_dependency,
     is_workflow_done,
@@ -107,8 +109,9 @@ async def run_workflow_async(
     worker_id: str = "worker_1",
     lease_seconds: float = leases.DEFAULT_LEASE_SECONDS,
     heartbeat_interval: float | None = None,
+    planner: Planner | None = None,
 ) -> WorkflowStatus:
-    """The scheduler loop (Phases 2-4). Each round's READY tasks are pushed
+    """The scheduler loop (Phases 2-5). Each round's READY tasks are pushed
     onto a Redis-backed queue (Section 5.7) and pulled by up to
     `max_concurrency` worker loops; falls back to direct dispatch if Redis is
     unreachable (Section 15A.1). On top of Phase 2's concurrency, this adds
@@ -130,9 +133,15 @@ async def run_workflow_async(
     - a failed task is classified transient/permanent and either retried with
       exponential backoff or given up on (Section 5.9);
     - every transition also writes an outbox event in the same commit
-      (Section 15F.4/15G.2).
+      (Section 15F.4/15G.2);
+    - a task that discovers mid-call it needs another piece of information
+      (Section 5.10) triggers the replanner instead of an ordinary retry:
+      new prerequisite task(s) are spliced into the graph, bounded by the
+      task's own `max_replans` so a prerequisite that never resolves can't
+      mutate the graph forever.
     """
     worker = worker or Worker()
+    planner = planner or RuleBasedPlanner()
     redis_client = redis_client or get_redis()
     queue = ReadyQueue(redis_client, workflow_id) if is_reachable(redis_client) else None
     if queue:
@@ -231,19 +240,29 @@ async def run_workflow_async(
                     await heartbeat
 
             dispatched_ids = {t.id for t in dispatched}
+            replanned_ids: set[str] = set()
             for task in round_tasks:
                 if task.id in decision_ids:
                     record_outcome(session, task, decision_ids[task.id])
                 if task.id in dispatched_ids:
-                    if task.status == TaskStatus.FAILED:
+                    if task.status == TaskStatus.FAILED and task.error_category == "needs_replan":
+                        new_tasks = replanner.replan_for_missing_prerequisite(
+                            session, tasks, task, planner
+                        )
+                        if new_tasks:
+                            replanned_ids.add(task.id)
+                    elif task.status == TaskStatus.FAILED:
                         retry.maybe_schedule_retry(task)
                     if task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
                         idempotency.record_result(session, task)
                 applied = repository.commit_task_if_fencing_valid(session, task)
                 if applied:
-                    event_type = (
-                        "task.cache_hit" if task.id in cached_ids else f"task.{task.status.value.lower()}"
-                    )
+                    if task.id in cached_ids:
+                        event_type = "task.cache_hit"
+                    elif task.id in replanned_ids:
+                        event_type = "task.replanned"
+                    else:
+                        event_type = f"task.{task.status.value.lower()}"
                     repository.record_outbox_event(session, task.id, event_type, _event_payload(task))
             session.commit()
             progressed = True
@@ -288,6 +307,7 @@ def run_workflow(
     worker_id: str = "worker_1",
     lease_seconds: float = leases.DEFAULT_LEASE_SECONDS,
     heartbeat_interval: float | None = None,
+    planner: Planner | None = None,
 ) -> WorkflowStatus:
     """Sync wrapper over `run_workflow_async` for callers (the FastAPI
     background task, the existing test suite) that aren't already inside an
@@ -306,5 +326,6 @@ def run_workflow(
             worker_id,
             lease_seconds,
             heartbeat_interval,
+            planner,
         )
     )

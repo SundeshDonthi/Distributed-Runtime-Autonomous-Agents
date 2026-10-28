@@ -30,10 +30,16 @@ class Task(BaseModel):
     input: dict | None = None
     output: dict | None = None
     error: str | None = None
-    error_category: str | None = None  # "transient" | "permanent", set by the worker
+    error_category: str | None = None  # "transient" | "permanent" | "needs_replan"
     retry_count: int = 0
     max_retries: int = 3
     retry_after: datetime | None = None
+
+    # Dynamic replanning (Section 5.10/15J Phase 5): how many times this
+    # specific task has already triggered a graph mutation, bounded by
+    # `max_replans` so a prerequisite that never resolves can't loop forever.
+    replan_count: int = 0
+    max_replans: int = 2
     created_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None

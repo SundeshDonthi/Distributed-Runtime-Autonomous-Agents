@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from runtime.models.task import Task, TaskStatus
-from runtime.scheduler.retry import backoff_seconds, maybe_schedule_retry, reclaim_expired_lease
+from runtime.recovery.retry import backoff_seconds, maybe_schedule_retry, reclaim_expired_lease
 from runtime.state.orm import utcnow
 
 

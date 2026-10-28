@@ -22,6 +22,20 @@ class Planner(ABC):
     def generate_plan(self, workflow_id: str, objective: str) -> list[Task]:
         raise NotImplementedError
 
+    @abstractmethod
+    def generate_subplan(
+        self, workflow_id: str, blocked_task_id: str, replan_index: int, context: str
+    ) -> list[Task]:
+        """Section 5.10: given a task that discovered mid-execution it needs
+        something it wasn't given (`context`, read from the task's own error
+        message), produces the additional task(s) that satisfy it. Returned
+        tasks must have no dependencies of their own and ids that can't
+        collide with anything already in the workflow -- `replan_index`
+        (how many times this specific task has already triggered a replan)
+        is there to make that easy to guarantee deterministically.
+        """
+        raise NotImplementedError
+
 
 class RuleBasedPlanner(Planner):
     """Phase 1 placeholder planner.
@@ -69,6 +83,21 @@ class RuleBasedPlanner(Planner):
         )
 
         return [*research_tasks, compare_task]
+
+    def generate_subplan(
+        self, workflow_id: str, blocked_task_id: str, replan_index: int, context: str
+    ) -> list[Task]:
+        task_id = f"{blocked_task_id}_prereq_{replan_index}"
+        return [
+            Task(
+                id=task_id,
+                workflow_id=workflow_id,
+                description=f"Resolve missing prerequisite: {context}",
+                dependencies=[],
+                required_capabilities=["lookup"],
+                input={"capability": "lookup", "args": {"query": context}},
+            )
+        ]
 
     @staticmethod
     def _extract_entities(objective: str) -> list[str]:

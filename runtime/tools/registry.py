@@ -16,6 +16,20 @@ class UnknownCapabilityError(KeyError):
     pass
 
 
+class MissingPrerequisiteError(Exception):
+    """Raised by a tool when it discovers mid-call that it needs another
+    piece of information before it can finish -- Section 5.10's own example:
+    "Task B discovers that another piece of information is required." Caught
+    by `Worker` and classified `error_category="needs_replan"` rather than a
+    plain failure, so the scheduler invokes the replanner (Section 5.10/
+    15J Phase 5) instead of a plain retry.
+    """
+
+    def __init__(self, description: str) -> None:
+        super().__init__(description)
+        self.description = description
+
+
 _OBJECT_SCHEMA = {"type": "object"}
 
 
@@ -108,6 +122,28 @@ def _naive_charge(args: dict) -> dict:
     return {"charged": amount, "duplicate_suppressed": False}
 
 
+def _make_research_step() -> ToolFn:
+    """Section 5.10's own worked example, made concrete: a research task that
+    discovers mid-call it needs supporting data it wasn't given. The first
+    call for a given `topic` raises `MissingPrerequisiteError`; a second call
+    (after the scheduler has replanned and retried it) succeeds. This proves
+    the graph-mutation-and-retry mechanics without needing real data flow
+    between tasks -- threading a prerequisite task's actual output into a
+    dependent task's args is Section 14's context-assembly work, which is
+    separate and not built yet.
+    """
+    seen: set[str] = set()
+
+    def _research_step(args: dict) -> dict:
+        topic = args.get("topic", "")
+        if topic not in seen:
+            seen.add(topic)
+            raise MissingPrerequisiteError(f"need supporting data for {topic!r}")
+        return {"result": f"researched {topic!r} with prerequisite satisfied"}
+
+    return _research_step
+
+
 _TEXT_ARG_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}}
 _DELAY_ARG_SCHEMA = {
     "type": "object",
@@ -119,6 +155,7 @@ _CHARGE_ARG_SCHEMA = {
     "properties": {"idempotency_key": {"type": "string"}, "amount": {"type": "number"}},
     "required": ["amount"],
 }
+_RESEARCH_ARG_SCHEMA = {"type": "object", "properties": {"topic": {"type": "string"}}}
 
 # Phase 1/2 tools (echo, uppercase, delay) are deterministic and single-option
 # -- there's nothing to route between. `lookup_fast`/`lookup_careful` share
@@ -167,6 +204,15 @@ _REGISTRY: dict[str, ToolMetadata] = {
         reliability=1.0,
         cost_per_call=0.0,
         input_schema=_CHARGE_ARG_SCHEMA,
+    ),
+    "research_step": ToolMetadata(
+        name="research_step",
+        capability="research",
+        fn=_make_research_step(),
+        base_latency_seconds=0.0,
+        reliability=1.0,
+        cost_per_call=0.0,
+        input_schema=_RESEARCH_ARG_SCHEMA,
     ),
 }
 

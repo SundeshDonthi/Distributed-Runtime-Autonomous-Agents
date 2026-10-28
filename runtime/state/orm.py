@@ -37,6 +37,8 @@ class WorkflowRow(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     objective: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="PLANNING")
+    # Bumped by the replanner on every graph mutation (Section 15G.1).
+    plan_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -60,6 +62,9 @@ class TaskRow(Base):
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     max_retries: Mapped[int] = mapped_column(Integer, default=3)
     retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Dynamic replanning (Section 5.10/15J Phase 5) -- see Task's docstring.
+    replan_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_replans: Mapped[int] = mapped_column(Integer, default=2)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -89,6 +94,24 @@ class TaskDependencyRow(Base):
     depends_on_task_id: Mapped[str] = mapped_column(
         ForeignKey("tasks.id"), primary_key=True
     )
+
+
+class ReplanEventRow(Base):
+    """An audit trail of every graph mutation (Section 5.10/15J Phase 5):
+    which task was blocked, why, what got inserted to unblock it, and which
+    plan version the mutation produced. Purely additive history -- nothing
+    here is ever updated, only appended to.
+    """
+
+    __tablename__ = "replan_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("workflows.id"), nullable=False)
+    blocked_task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    context: Mapped[str] = mapped_column(Text, nullable=False)
+    new_task_ids: Mapped[list] = mapped_column(JSON, nullable=False)
+    plan_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ToolCallRow(Base):

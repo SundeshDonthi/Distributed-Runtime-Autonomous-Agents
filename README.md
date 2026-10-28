@@ -95,10 +95,41 @@ Tracking the project description's Section 15J roadmap (Phases 1-9).
     round finishes. There's also no real schema-migration tooling yet
     (`Base.metadata.create_all` only adds missing tables, not missing
     columns on existing ones) -- a schema change on a real deployment
-    currently needs a manual drop/recreate, fine for this dev database, not
-    for anything with data worth keeping.
-- Phases 5, 6 (feature snapshots + held-out splits), 7 (train the neural
-  router), 8 (real multi-process distribution), 9 (C++): not started yet.
+    currently needs a manual drop/recreate (`python -m
+    scripts.reset_dev_db`), fine for this dev database, not for anything
+    with data worth keeping.
+- **Phase 5 -- Dynamic replanning: done.**
+  - **`MissingPrerequisiteError`** (`runtime/tools/registry.py`): a tool
+    raises this when it discovers mid-call that it needs information it
+    wasn't given -- Section 5.10's own example made concrete. `Worker` tags
+    it `error_category="needs_replan"`, a third category alongside
+    transient/permanent that routes to the replanner instead of either
+    retry path.
+  - **The replanner** (`runtime/recovery/replanner.py`): calls
+    `Planner.generate_subplan` (a second method alongside `generate_plan`,
+    same LLM-agnostic seam) to produce new task(s), validates the *resulting*
+    graph before persisting anything (rejecting a colliding id, a subplan
+    task with its own dependencies, or a cycle), then splices them in as a
+    pure addition -- a new dependency edge onto the blocked task, nothing
+    already completed is touched or re-validated. Bounded by each task's own
+    `max_replans` so a prerequisite that never resolves can't mutate the
+    graph forever.
+  - **Versioned, audited mutation** (Section 15G.1): `Workflow.plan_version`
+    bumps on every successful replan; a `replan_events` table records which
+    task was blocked, why, and what got inserted, served at `GET
+    /workflows/{id}/replan-events`.
+  - Verified against the doc's own literal example: an A -> B -> C graph
+    where B discovers it needs D becomes A -> B -> D -> C, with A's
+    completion timestamp proving it was never re-touched
+    (`test_replan_unblocks_a_task_and_reuses_completed_work`).
+  - One more fencing-check interaction bug caught here, same root cause as
+    Phase 4's: clearing `lease_owner` as part of returning a replanned task
+    to PENDING made the fencing check compare the just-cleared value against
+    the DB's still-active lease, silently rejecting the whole mutation.
+    Fixed by leaving lease fields alone on that path (harmless -- the next
+    `acquire_lease` overwrites them regardless).
+- Phase 6 (feature snapshots + held-out splits), 7 (train the neural router),
+  8 (real multi-process distribution), 9 (C++): not started yet.
 
 No LLM in the planner yet (`runtime/planner/planner.py` is still rule-based
 -- see its docstring); that's intentionally decoupled from the rest of this
@@ -160,13 +191,16 @@ python -m benchmarks.generate_routing_dataset
 
 ```
 runtime/
-  api/         FastAPI app/routes (/workflows, /tools, /workflows/{id}/routing-decisions)
+  api/         FastAPI app/routes (/workflows, /tools, /workflows/{id}/
+               routing-decisions, /workflows/{id}/replan-events)
   models/      Pydantic domain models (Workflow, Task)
-  planner/     Objective -> task graph, plus DAG validation
+  planner/     Objective -> task graph (generate_plan) and blocked-task ->
+               subplan (generate_subplan), plus DAG validation
   scheduler/   dag.py (readiness), scheduler.py (the async run loop + Redis
-               queue), leases.py (claim/fencing/reclaim), retry.py
-               (transient/permanent classification + backoff),
+               queue), leases.py (claim/fencing/reclaim),
                idempotency.py (cached-result short-circuit)
+  recovery/    retry.py (transient/permanent classification + backoff),
+               replanner.py (Section 5.10's graph mutation)
   workers/     Task execution (async, offloaded to a thread per tool call) --
                only ever runs an already-resolved tool, never routes itself;
                validates args against the tool's JSON schema before calling it
@@ -181,8 +215,9 @@ runtime/
 mcp_servers/   A real (demo) MCP server, launched as a subprocess by
                runtime/tools/mcp_client.py -- proves genuine dynamic tool
                discovery rather than a hardcoded registry
-scripts/       chaos_run_workflow.py -- the subprocess entry point the chaos
-               recovery test kills mid-execution
+scripts/       chaos_run_workflow.py (the subprocess entry point the chaos
+               recovery test kills mid-execution), reset_dev_db.py (drop +
+               recreate the schema -- see the Phase 4 scope boundary above)
 tests/
 benchmarks/    Standalone scripts proving systems-level claims (Section 16)
 ```
