@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import random
 
 import redis as redis_lib
 from sqlalchemy.orm import Session
 
 from runtime.models.task import Task, TaskStatus
 from runtime.models.workflow import WorkflowStatus
+from runtime.routing.dispatch import record_outcome, resolve_task_tool
+from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights
 from runtime.scheduler.dag import has_failed_dependency, is_workflow_done, ready_tasks, workflow_succeeded
 from runtime.scheduler.queue import ReadyQueue
 from runtime.state import repository
@@ -52,6 +55,9 @@ async def run_workflow_async(
     worker: Worker | None = None,
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
     redis_client: redis_lib.Redis | None = None,
+    routing_weights: RouterWeights = DEFAULT_WEIGHTS,
+    explore_probability: float = 0.0,
+    rng: random.Random | None = None,
 ) -> WorkflowStatus:
     """Phase 2 scheduler loop. Each round's READY tasks are pushed onto a
     Redis-backed queue (Section 5.7) and pulled by up to `max_concurrency`
@@ -60,6 +66,10 @@ async def run_workflow_async(
     now. If Redis is unreachable, falls back to direct concurrent dispatch
     (Section 15A.1's "optional at runtime, fall back to the deterministic
     baseline" philosophy) so the scheduler still works without it.
+
+    `explore_probability`/`rng` are forwarded to `resolve_task_tool` for
+    capability-routed tasks -- left at 0 for ordinary runs, set above 0 only
+    when deliberately generating a training dataset (Section 15C.3).
     """
     worker = worker or Worker()
     redis_client = redis_client or get_redis()
@@ -81,11 +91,29 @@ async def run_workflow_async(
 
         round_tasks = ready_tasks(tasks)
         if round_tasks:
+            # Routing (Section 15A.1) happens here, before dispatch: a task
+            # addressed by capability rather than an explicit tool gets
+            # resolved to one using current observed-outcome history, and the
+            # decision is logged before anyone acts on it.
+            decision_ids = {
+                task.id: decision_id
+                for task in round_tasks
+                if (
+                    decision_id := resolve_task_tool(
+                        session, task, routing_weights, explore_probability, rng
+                    )
+                )
+                is not None
+            }
+
             if queue is not None:
                 await _run_round_via_queue(round_tasks, queue, worker, max_concurrency)
             else:
                 await _run_round_directly(round_tasks, worker, max_concurrency)
+
             for task in round_tasks:
+                if task.id in decision_ids:
+                    record_outcome(session, task, decision_ids[task.id])
                 repository.update_task(session, task)
             progressed = True
 
@@ -115,11 +143,23 @@ def run_workflow(
     worker: Worker | None = None,
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
     redis_client: redis_lib.Redis | None = None,
+    routing_weights: RouterWeights = DEFAULT_WEIGHTS,
+    explore_probability: float = 0.0,
+    rng: random.Random | None = None,
 ) -> WorkflowStatus:
     """Sync wrapper over `run_workflow_async` for callers (the FastAPI
     background task, the existing test suite) that aren't already inside an
     event loop.
     """
     return asyncio.run(
-        run_workflow_async(session, workflow_id, worker, max_concurrency, redis_client)
+        run_workflow_async(
+            session,
+            workflow_id,
+            worker,
+            max_concurrency,
+            redis_client,
+            routing_weights,
+            explore_probability,
+            rng,
+        )
     )

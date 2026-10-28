@@ -25,23 +25,40 @@ Phase 1 proved the sequential path. Phase 2 adds:
   `runtime/state/redis_client.py`), per Section 15A.1's "optional at runtime"
   philosophy.
 
-Also underway, toward Section 15's tool-routing / neural-routing work: a
-**heuristic router** (`runtime/routing/heuristic.py`) that scores competing
-tools for the same capability (`capability_match + reliability - latency -
-cost`) and picks the best one -- this is the permanent deterministic fallback
-a future neural scorer will degrade to, not a throwaway step. A task now
-addresses work either by exact tool name (`{"tool": "echo"}`, bypasses
-routing) or by capability (`{"capability": "lookup"}`, routed). `lookup_fast`
-vs `lookup_careful` in the tool registry exist specifically to give the
-router a real latency/reliability tradeoff to reason about (Section 15's own
-Tool A/B example).
+Also underway, toward Section 15's tool-routing / neural-routing work:
+
+- A **heuristic router** (`runtime/routing/heuristic.py`) scoring competing
+  tools for a capability (`capability_match + reliability - latency - cost`)
+  -- the permanent deterministic fallback a future neural scorer degrades to,
+  not a throwaway step. A task addresses work either by exact tool name
+  (`{"tool": "echo"}`, bypasses routing) or by capability
+  (`{"capability": "lookup"}`, routed). `lookup_fast` vs `lookup_careful` in
+  the tool registry exist to give the router a real latency/reliability
+  tradeoff to reason about (Section 15's own Tool A/B example).
+- Routing happens in the **scheduler's dispatch step**
+  (`runtime/routing/dispatch.py`), not inside the worker -- Section 15A.1's
+  own layering, since picking a tool from historical outcomes needs the DB
+  session a stateless worker (Section 5.5) deliberately doesn't have.
+- The router now considers **observed outcomes**, not just each tool's static
+  metadata (`runtime/routing/history.py`): every tool call is persisted
+  (`tool_calls`) and every routing decision + its full candidate set and
+  eventual outcome is too (`routing_decisions`/`routing_candidates`/
+  `routing_outcomes`, Section 15D/15G). `test_routing_dispatch.py`'s
+  `test_router_shifts_choice_after_enough_bad_outcomes` proves the router's
+  choice actually changes once a tool's real-world failure rate diverges from
+  its static prior.
+- `runtime/training/datasets.py` generates an initial labeled dataset
+  (Section 15C.3's "cold start"): controlled benchmark tasks run with
+  epsilon-greedy exploration so outcomes get logged for losing candidates
+  too, not only whichever tool the heuristic already favors (Section 15D.2's
+  selection-bias concern). `python -m benchmarks.generate_routing_dataset`
+  runs it end to end and reports the result.
 
 Still no LLM, no MCP, and no real distribution across worker processes yet --
 those are Phase 3/6 (see `runtime/planner/planner.py` docstring and the
 roadmap in the project description, Section 15J / Section 17). The neural
-router itself (Section 15C) is further out still -- it needs logged routing
-decisions/outcomes as training data first (Section 15D), which doesn't exist
-yet either.
+scorer itself (Section 15C) -- and the C++ component planned for it -- is
+next.
 
 ## Setup
 
@@ -91,6 +108,7 @@ require a live Postgres instance.
 
 ```bash
 python -m benchmarks.parallelism
+python -m benchmarks.generate_routing_dataset
 ```
 
 ## Layout
@@ -102,10 +120,14 @@ runtime/
   planner/     Objective -> task graph, plus DAG validation
   scheduler/   Dependency-ready-task computation, the async run loop, and the
                Redis-backed ready-task queue
-  workers/     Task execution (async, offloaded to a thread per tool call)
+  workers/     Task execution (async, offloaded to a thread per tool call) --
+               only ever runs an already-resolved tool, never routes itself
   tools/       Tool registry, with per-tool metadata (latency/reliability/cost)
-  routing/     Heuristic tool/strategy selection (Section 15), the fallback a
-               future neural router degrades to
+  routing/     heuristic.py (scoring), history.py (observed stats from past
+               tool calls), dispatch.py (the scheduler's routing step: resolve
+               a capability to a tool, log the decision, log the outcome)
+  training/    datasets.py -- generates a labeled routing dataset via
+               controlled, exploratory benchmark runs (Section 15C.3)
   state/       SQLAlchemy ORM + repository (Postgres) and the Redis client
 tests/
 benchmarks/    Standalone scripts proving systems-level claims (Section 16)
