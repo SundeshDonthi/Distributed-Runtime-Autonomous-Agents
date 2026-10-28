@@ -25,3 +25,20 @@ def test_end_to_end_workflow_lifecycle():
         assert body["status"] == "COMPLETED"
         assert len(body["tasks"]) == 4
         assert all(t["status"] == "COMPLETED" for t in body["tasks"])
+
+
+def test_tools_endpoint_lists_registered_tools_including_mcp_discovered_ones():
+    with TestClient(app) as client:
+        resp = client.get("/tools")
+        assert resp.status_code == 200
+        names = {t["name"] for t in resp.json()}
+        assert {"echo", "uppercase", "delay", "lookup_fast", "lookup_careful"} <= names
+        # Proves MCP discovery actually ran during this app's lifespan, not
+        # just that the in-process tools are listed.
+        assert "mcp.search_web" in names
+
+
+def test_routing_decisions_endpoint_returns_404_for_unknown_workflow():
+    with TestClient(app) as client:
+        resp = client.get("/workflows/does_not_exist/routing-decisions")
+        assert resp.status_code == 404

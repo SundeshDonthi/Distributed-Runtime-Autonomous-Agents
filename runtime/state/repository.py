@@ -258,6 +258,37 @@ def get_routing_decision(session: Session, decision_id: str) -> dict | None:
     return result
 
 
+def get_routing_decisions_for_workflow(session: Session, workflow_id: str) -> list[dict]:
+    """Every routing decision for a workflow, including ones whose task
+    hasn't finished yet (`outcome` is None then) -- what `GET /workflows/{id}
+    /routing-decisions` (Section 15H.2) serves. Unlike `get_routing_dataset`,
+    this is for inspecting a workflow's routing activity, not for building a
+    labeled training set, so an unresolved decision is still worth showing.
+    """
+    stmt = (
+        select(RoutingDecisionRow)
+        .where(RoutingDecisionRow.workflow_id == workflow_id)
+        .options(
+            selectinload(RoutingDecisionRow.candidates),
+            selectinload(RoutingDecisionRow.outcome),
+        )
+    )
+    results = []
+    for row in session.scalars(stmt).all():
+        result = _routing_decision_dict(row)
+        result["outcome"] = (
+            None
+            if row.outcome is None
+            else {
+                "success": row.outcome.success,
+                "latency_ms": row.outcome.latency_ms,
+                "error": row.outcome.error,
+            }
+        )
+        results.append(result)
+    return results
+
+
 def get_routing_dataset(session: Session, workflow_id: str | None = None) -> list[dict]:
     """One row per routing decision that has a recorded outcome, flattened
     for training/evaluation (Section 15D's dataset, Section 15I's

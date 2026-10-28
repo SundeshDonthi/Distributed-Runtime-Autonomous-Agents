@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
+import jsonschema
+
 from runtime.models.task import Task, TaskStatus
 from runtime.state.orm import utcnow
-from runtime.tools.registry import UnknownToolError, get_tool
+from runtime.tools.registry import UnknownToolError, get_tool_metadata
 
 
 class Worker:
@@ -19,7 +21,10 @@ class Worker:
     Routing (Section 15A.1) happens one layer up, in the scheduler's dispatch
     step (`runtime.routing.dispatch.resolve_task_tool`), because choosing a
     tool from historical outcomes needs the DB session a stateless worker
-    deliberately doesn't have.
+    deliberately doesn't have. What the worker does own is validating `args`
+    against the resolved tool's declared JSON schema before calling it
+    (Section 15A.1: "never bypasses... schema validation") -- this applies
+    equally to tools registered in-process and ones discovered over MCP.
     """
 
     def __init__(self, worker_id: str = "worker_1") -> None:
@@ -34,8 +39,12 @@ class Worker:
         try:
             if tool_name is None:
                 raise ValueError("task.input must specify a resolved 'tool'")
-            tool = get_tool(tool_name)
-            task.output = await asyncio.to_thread(tool, args)
+            metadata = get_tool_metadata(tool_name)
+            try:
+                jsonschema.validate(instance=args, schema=metadata.input_schema)
+            except jsonschema.exceptions.ValidationError as exc:
+                raise ValueError(f"schema validation failed: {exc.message}") from exc
+            task.output = await asyncio.to_thread(metadata.fn, args)
             task.status = TaskStatus.COMPLETED
         except UnknownToolError as exc:
             task.status = TaskStatus.FAILED

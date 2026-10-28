@@ -66,6 +66,41 @@ def test_record_outcome_persists_tool_call_and_outcome(db_session):
     assert calls[0].status == "COMPLETED"
 
 
+def test_workflow_decisions_endpoint_data_includes_unresolved_decisions(db_session):
+    # get_routing_dataset requires an outcome (it's a training set, every row
+    # needs a label); get_routing_decisions_for_workflow is for inspecting a
+    # workflow's routing activity and should show in-flight decisions too.
+    workflow_id = "wf_unresolved"
+    repository.create_workflow(db_session, workflow_id, "unresolved test")
+    resolved_task = Task(
+        id="resolved", workflow_id=workflow_id, description="t",
+        input={"capability": "lookup", "args": {}},
+    )
+    unresolved_task = Task(
+        id="unresolved", workflow_id=workflow_id, description="t",
+        input={"capability": "lookup", "args": {}},
+    )
+    repository.save_tasks(db_session, [resolved_task, unresolved_task])
+
+    resolved_decision_id = resolve_task_tool(db_session, resolved_task)
+    resolve_task_tool(db_session, unresolved_task)  # never gets an outcome
+
+    resolved_task.status = TaskStatus.COMPLETED
+    resolved_task.started_at = datetime.now(timezone.utc)
+    resolved_task.completed_at = resolved_task.started_at + timedelta(milliseconds=10)
+    record_outcome(db_session, resolved_task, resolved_decision_id)
+
+    all_decisions = repository.get_routing_decisions_for_workflow(db_session, workflow_id)
+    assert len(all_decisions) == 2
+    outcomes = {d["task_id"]: d["outcome"] for d in all_decisions}
+    assert outcomes["resolved"] is not None
+    assert outcomes["unresolved"] is None
+
+    dataset_only = repository.get_routing_dataset(db_session, workflow_id=workflow_id)
+    assert len(dataset_only) == 1
+    assert dataset_only[0]["task_id"] == "resolved"
+
+
 def test_router_shifts_choice_after_enough_bad_outcomes(db_session):
     # Default weights pick lookup_fast when both tools are at their static
     # priors (see test_routing_heuristic.py). Simulate lookup_fast actually
