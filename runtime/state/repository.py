@@ -203,18 +203,19 @@ def create_routing_decision(
     task_id: str,
     workflow_id: str,
     capability: str,
-    ranked_candidates: list[tuple[str, float]],
+    ranked_candidates: list[tuple[str, float, dict]],
     selected_tool: str,
     weights: dict,
     was_exploration: bool = False,
     model_version: str = "heuristic-v1",
 ) -> str:
     """Persists a routing decision and the full ranked candidate set (not
-    just the winner -- Section 15G.2). `selected_tool` is passed explicitly
-    rather than assumed to be `ranked_candidates[0]`, since an exploratory
-    decision picks something other than the top-ranked candidate on purpose.
-    Returns the decision id so the caller can attach the eventual outcome
-    once the chosen tool has run.
+    just the winner -- Section 15G.2), each with its feature snapshot
+    (Section 15D.1) frozen at decision time. `selected_tool` is passed
+    explicitly rather than assumed to be `ranked_candidates[0]`, since an
+    exploratory decision picks something other than the top-ranked candidate
+    on purpose. Returns the decision id so the caller can attach the
+    eventual outcome once the chosen tool has run.
     """
     decision = RoutingDecisionRow(
         task_id=task_id,
@@ -228,10 +229,15 @@ def create_routing_decision(
     session.add(decision)
     session.flush()
 
-    for rank, (tool_name, score) in enumerate(ranked_candidates):
+    for rank, (tool_name, score, features) in enumerate(ranked_candidates):
         session.add(
             RoutingCandidateRow(
-                decision_id=decision.id, tool_name=tool_name, score=score, rank=rank
+                decision_id=decision.id,
+                tool_name=tool_name,
+                score=score,
+                rank=rank,
+                features=features,
+                feature_version=features.get("feature_version", ""),
             )
         )
     session.flush()
@@ -277,7 +283,13 @@ def _routing_decision_dict(row: RoutingDecisionRow) -> dict:
         "selected_tool": row.selected_tool,
         "was_exploration": row.was_exploration,
         "candidates": [
-            {"tool_name": c.tool_name, "score": c.score, "rank": c.rank}
+            {
+                "tool_name": c.tool_name,
+                "score": c.score,
+                "rank": c.rank,
+                "features": c.features,
+                "feature_version": c.feature_version,
+            }
             for c in sorted(row.candidates, key=lambda c: c.rank)
         ],
         "created_at": row.created_at,

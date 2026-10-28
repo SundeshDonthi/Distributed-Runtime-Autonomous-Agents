@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from runtime.models.task import Task
 from runtime.scheduler.scheduler import run_workflow
 from runtime.state import repository
+from runtime.training.splits import assign_split
 
 DEFAULT_EXPLORE_PROBABILITY = 0.3
 
@@ -54,3 +55,36 @@ def run_cold_start_benchmark(
     workflow_id = generate_cold_start_workflow(session, n_tasks, capability=capability)
     run_workflow(session, workflow_id, explore_probability=explore_probability, rng=rng)
     return workflow_id
+
+
+def export_training_rows(
+    session: Session,
+    seed: int = 0,
+    train_frac: float = 0.7,
+    val_frac: float = 0.15,
+    workflow_id: str | None = None,
+) -> list[dict]:
+    """Section 15D's actual training export: every labeled routing decision
+    (Section 15D's dataset), each tagged with a reproducible train/val/test
+    split assigned by *workflow* (Section 15D.2), so a later training run
+    doesn't need to reimplement splitting or risk leaking a workflow across
+    splits. Each row carries the full candidate set with its feature
+    snapshot and the outcome for whichever candidate was actually selected.
+    """
+    rows = repository.get_routing_dataset(session, workflow_id=workflow_id)
+    for row in rows:
+        row["split"] = assign_split(row["workflow_id"], seed, train_frac, val_frac)
+    return rows
+
+
+def selected_candidate_features(row: dict) -> dict | None:
+    """The feature snapshot for whichever candidate a dataset row's decision
+    actually selected -- the (features, label=row["success"]) pair Section
+    15C.2's "binary success predictor" trains on. None if the selected tool
+    is somehow missing from the logged candidate set (shouldn't happen, but
+    an explicit None beats an IndexError two phases from now).
+    """
+    for candidate in row["candidates"]:
+        if candidate["tool_name"] == row["selected_tool"]:
+            return candidate["features"]
+    return None

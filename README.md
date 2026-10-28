@@ -128,8 +128,38 @@ Tracking the project description's Section 15J roadmap (Phases 1-9).
     the DB's still-active lease, silently rejecting the whole mutation.
     Fixed by leaving lease fields alone on that path (harmless -- the next
     `acquire_lease` overwrites them regardless).
-- Phase 6 (feature snapshots + held-out splits), 7 (train the neural router),
-  8 (real multi-process distribution), 9 (C++): not started yet.
+- **Phase 6 -- Routing dataset, finished: done.**
+  - **Feature snapshots** (`runtime/routing/heuristic.py`'s
+    `build_feature_vector`, `FEATURE_VERSION`): the exact inputs
+    `score_candidate` used for a candidate -- static priors and whatever
+    observed stats were current *at that moment* -- are persisted alongside
+    each `routing_candidates` row, not just the resulting score. Verified
+    that recomputing the score purely from a persisted snapshot reproduces
+    the logged score exactly
+    (`test_persisted_features_reproduce_the_persisted_score`), so a training
+    run can trust the snapshot instead of re-deriving features from
+    observed-stats history that's since moved on (Section 15D.2: "avoid
+    using post-execution fields as pre-execution features").
+  - **Held-out splits by workflow** (`runtime/training/splits.py`):
+    deterministic hash-based `assign_split(workflow_id, seed, ...)` -- same
+    inputs always produce the same split, so a dataset export is
+    reproducible with no persisted assignment table to keep in sync. Split
+    by *workflow*, not by individual decision (Section 15D.2), so a
+    multi-task workflow can't leak across train/val/test.
+  - **The actual training export** (`runtime/training/datasets.py`'s
+    `export_training_rows`, `benchmarks/export_training_dataset.py`): every
+    labeled decision tagged with its split, written out as JSON Lines --
+    what a Phase 7 training script reads, as opposed to the Phase 3 cold-
+    start generator, which only ever reported live summary stats.
+  - **A real cleanup bug caught here**: the FastAPI app's shutdown stopped
+    the MCP subprocess connection but never unregistered the tools it had
+    added, so `mcp.search_web` stayed in the global tool registry --
+    backed by a now-dead connection -- after every app shutdown, silently
+    contaminating whichever test ran next in the same process (and, in a
+    real deployment, poisoning a restart). Fixed by unregistering each
+    MCP-discovered tool on shutdown, not just disconnecting.
+- Phase 7 (train the neural router), 8 (real multi-process distribution),
+  9 (C++): not started yet.
 
 No LLM in the planner yet (`runtime/planner/planner.py` is still rule-based
 -- see its docstring); that's intentionally decoupled from the rest of this
@@ -185,6 +215,7 @@ require a live Postgres instance.
 ```bash
 python -m benchmarks.parallelism
 python -m benchmarks.generate_routing_dataset
+python -m benchmarks.export_training_dataset   # writes training_dataset.jsonl
 ```
 
 ## Layout
@@ -206,11 +237,14 @@ runtime/
                validates args against the tool's JSON schema before calling it
   tools/       registry.py (tool metadata incl. input_schema), mcp_client.py
                (discovers tools from a real MCP server over stdio)
-  routing/     heuristic.py (scoring), history.py (observed stats from past
-               tool calls), dispatch.py (the scheduler's routing step: resolve
-               a capability to a tool, log the decision, log the outcome)
-  training/    datasets.py -- generates a labeled routing dataset via
-               controlled, exploratory benchmark runs (Section 15C.3)
+  routing/     heuristic.py (scoring + feature snapshots), history.py
+               (observed stats from past tool calls), dispatch.py (the
+               scheduler's routing step: resolve a capability to a tool,
+               log the decision + feature snapshots, log the outcome)
+  training/    datasets.py (generates a labeled dataset via controlled,
+               exploratory benchmark runs, Section 15C.3; exports it with
+               splits), splits.py (deterministic train/val/test assignment
+               by workflow, Section 15D.2)
   state/       SQLAlchemy ORM + repository (Postgres) and the Redis client
 mcp_servers/   A real (demo) MCP server, launched as a subprocess by
                runtime/tools/mcp_client.py -- proves genuine dynamic tool

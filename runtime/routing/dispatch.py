@@ -5,7 +5,7 @@ import random
 from sqlalchemy.orm import Session
 
 from runtime.models.task import Task, TaskStatus
-from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights, rank_candidates_with_scores
+from runtime.routing.heuristic import DEFAULT_WEIGHTS, RouterWeights, rank_candidates_with_details
 from runtime.routing.history import get_observed_stats_for_capability
 from runtime.state import repository
 from runtime.tools.registry import tools_for_capability
@@ -49,7 +49,7 @@ def resolve_task_tool(
 
     candidates = tools_for_capability(capability)
     observed = get_observed_stats_for_capability(session, candidates)
-    ranked = rank_candidates_with_scores(capability, weights, observed)
+    ranked = rank_candidates_with_details(capability, weights, observed)
 
     was_exploration = False
     selected_tool = ranked[0][0]
@@ -70,7 +70,7 @@ def resolve_task_tool(
         task_id=task.id,
         workflow_id=task.workflow_id,
         capability=capability,
-        ranked_candidates=[(tool.name, score) for tool, score in ranked],
+        ranked_candidates=[(tool.name, score, features) for tool, score, features in ranked],
         selected_tool=selected_tool.name,
         weights={
             "capability_match": weights.capability_match,

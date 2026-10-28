@@ -175,7 +175,10 @@ class RoutingCandidateRow(Base):
     """Section 15G.2's `routing_candidates`: every tool that was eligible for
     a decision, not just the winner -- needed to reconstruct what the router
     chose *not* to do, and eventually to train a ranker rather than a
-    single-label classifier.
+    single-label classifier. `features`/`feature_version` are Section
+    15D.1's "feature snapshot": the exact inputs the scorer used for this
+    candidate, frozen at decision time so a later training run sees what the
+    router actually saw rather than today's since-updated observed stats.
     """
 
     __tablename__ = "routing_candidates"
@@ -185,6 +188,8 @@ class RoutingCandidateRow(Base):
     tool_name: Mapped[str] = mapped_column(String, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    features: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    feature_version: Mapped[str] = mapped_column(String, nullable=False, default="")
 
     decision: Mapped["RoutingDecisionRow"] = relationship(back_populates="candidates")
 
