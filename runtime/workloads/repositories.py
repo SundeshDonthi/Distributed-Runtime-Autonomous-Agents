@@ -31,6 +31,10 @@ def validate_repo(repo: str) -> str:
     return repo
 
 
+class GitHubResourceNotFound(ValueError):
+    """The requested public GitHub resource returned HTTP 404."""
+
+
 def _get(path: str) -> dict:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "Agent-Runtime-Explorer"}
     token = os.environ.get("GITHUB_TOKEN")
@@ -41,7 +45,7 @@ def _get(path: str) -> dict:
             if response.status_code in (403, 429):
                 raise RuntimeError("GitHub rate limit reached; try an offline example or retry later")
             if response.status_code == 404:
-                raise ValueError("public repository or README not found")
+                raise GitHubResourceNotFound("public repository or README not found")
             response.raise_for_status()
             content = bytearray()
             for chunk in response.iter_bytes():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -62,7 +63,7 @@ app.mount("/assets", StaticFiles(directory=WEB_ROOT), name="assets")
 @app.middleware("http")
 async def public_demo_boundary(request: Request, call_next):
     if os.environ.get("PUBLIC_DEMO") == "1" and request.method not in {"GET", "HEAD"}:
-        if request.url.path != "/demo/runs":
+        if request.url.path != "/demo/runs" and not re.fullmatch(r"/demo/investigations(?:/investigation_[a-f0-9]{32}/revisions)?", request.url.path):
             return JSONResponse({"detail": "This endpoint is disabled on the public demo."}, status_code=403)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"

@@ -277,3 +277,16 @@ for _name, _capability, _fn, _schema in (
     ("github.compare", "repository_report", compare_repositories, _REPORT_SCHEMA),
 ):
     register_tool(ToolMetadata(_name, _capability, _fn, 0.3, 1.0, 0.0, _schema))
+
+
+from runtime.investigations.evidence import collect as collect_investigation_evidence
+from runtime.investigations.evaluate import evaluate as evaluate_investigation, assemble as assemble_investigation
+
+from runtime.investigations.models import CollectionArgs, EvaluationArgs, AssemblyArgs
+
+for _name, _fn, _args_model in (
+    ("investigation.collect", collect_investigation_evidence, CollectionArgs),
+    ("investigation.evaluate", evaluate_investigation, EvaluationArgs),
+    ("investigation.assemble", assemble_investigation, AssemblyArgs),
+):
+    register_tool(ToolMetadata(_name, _name, _fn, 0.3, 1.0, 0.0, _args_model.model_json_schema()))

@@ -17,6 +17,7 @@ function inspect(task) {
     const row=element('div',undefined,'detail-line');row.append(element('span',label),element('span',String(value)));root.append(row);
   }
   if(task.started_at){const duration=task.completed_at?((Date.parse(task.completed_at)-Date.parse(task.started_at))/1000).toFixed(3)+'s':'In progress';root.append(element('p',`Execution: ${duration}`,'muted'));}
+  if(task.input?.reused_from)root.append(element('p','Reused verified collection checkpoint. No worker execution in this revision.','muted'));
   root.append(element('pre',JSON.stringify(task.output||{message:task.error||'Output will be checkpointed after execution.'},null,2)));
   document.querySelectorAll('.node').forEach(node=>node.classList.toggle('active',node.dataset.id===task.id));
 }
@@ -31,7 +32,9 @@ function drawGraph(tasks) {
     const col=element('div',undefined,'graph-column');
     for(const task of tasks.filter(t=>depths.get(t.id)===level)){
       const node=element('button',undefined,`node ${task.status}${task.id.includes('_readme_')?' added':''}`);node.type='button';node.dataset.id=task.id;
+      if(task.input?.reused_from)node.classList.add('reused');
       node.append(element('small',task.id.includes('_readme_')?'NEW PREREQUISITE':`TASK / ${String(tasks.indexOf(task)+1).padStart(2,'0')}`),element('b',task.description),element('span',task.status.toLowerCase(),'status'));
+      if(task.input?.reused_from)node.append(element('em','CHECKPOINT REUSED','reuse-label'));
       node.addEventListener('click',()=>inspect(task));col.append(node);
     }root.append(col);
   }
@@ -61,7 +64,7 @@ async function follow(id, token){
   let failures=0;
   while(token===generation){
     try{
-      const [workflow,events]=await Promise.all([api(`/workflows/${id}`),api(`/workflows/${id}/trace`)]);failures=0;
+      const [workflow,events]=await Promise.all([api(`/workflows/${id}`),api(`/workflows/${id}/trace`)]);if(token!==generation)return;failures=0;
       $('run-state').textContent=workflow.status.toLowerCase();$('workflow-id').textContent=workflow.id.slice(0,19)+'…';$('workflow-id').title=workflow.id;
       $('version').textContent='v'+workflow.plan_version;$('completed').textContent=`${workflow.tasks.filter(t=>t.status==='COMPLETED').length} / ${workflow.tasks.length}`;
       const start=Date.parse(workflow.created_at),end=workflow.completed_at?Date.parse(workflow.completed_at):Date.now();$('elapsed').textContent=((end-start)/1000).toFixed(2)+'s';
@@ -75,6 +78,7 @@ async function follow(id, token){
   }
 }
 $('run').addEventListener('click',async()=>{
+  if($('mode').value==='investigation')return;
   const token=++generation;$('run').disabled=true;$('run').textContent='Dispatching…';$('error').hidden=true;$('report').hidden=true;selectedId=null;
   $('run-state').textContent='dispatching';$('elapsed').textContent='—';$('completed').textContent='0 / 4';$('version').textContent='v1';$('workflow-id').textContent='Awaiting dispatch';$('events').replaceChildren(element('li','Submitting workflow…','muted'));$('inspector').replaceChildren(element('p','Select a task to inspect its persisted output.','muted'));drawGraph(placeholder);
   try{const workflow=await api('/demo/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:$('source').value,scenario:$('scenario').value})});history.replaceState(null,'',`/?run=${encodeURIComponent(workflow.id)}`);await follow(workflow.id,token);}

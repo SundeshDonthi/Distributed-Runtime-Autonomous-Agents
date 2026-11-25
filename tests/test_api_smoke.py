@@ -159,7 +159,9 @@ def test_router_models_lifecycle_through_the_api(client):
 def test_explorer_serves_local_assets_with_security_headers(client):
     response = client.get('/')
     assert response.status_code == 200
-    assert 'Many moving parts.' in response.text
+    assert 'Traceable evidence.' in response.text
+    assert 'id="requirements"' in response.text
+    assert client.get('/assets/investigations.js').status_code == 200
     assert "script-src 'self'" in response.headers['content-security-policy']
     assert client.get('/assets/app.js').status_code == 200
 
@@ -197,3 +199,20 @@ def test_demo_admission_limit_is_enforced(client, monkeypatch):
     response = client.post('/demo/runs', json={'source':'snapshot'})
     assert response.status_code == 429
     assert response.headers['retry-after'] == '30'
+
+
+def test_public_investigation_revision_keeps_parent_and_reuses_evidence(client, monkeypatch):
+    monkeypatch.setenv('PUBLIC_DEMO', '1')
+    initial = client.post('/demo/investigations', json={'requirements':['async_client']})
+    assert initial.status_code == 201
+    parent_id = initial.json()['id']
+    original = client.get(f'/demo/investigations/{parent_id}').json()
+    revision = client.post(f'/demo/investigations/{parent_id}/revisions', json={'requirements':['http2']})
+    assert revision.status_code == 201
+    child = client.get(f"/demo/investigations/{revision.json()['id']}").json()
+    assert child['workflow']['status'] == 'COMPLETED'
+    assert child['reused_checkpoints'] == 6
+    assert child['parent_workflow_id'] == parent_id
+    assert child['report']['requirements'] == ['http2']
+    assert client.get(f'/demo/investigations/{parent_id}').json() == original
+    assert client.post('/demo/investigations', json={'requirements':['unsupported']}).status_code == 422

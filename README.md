@@ -10,9 +10,13 @@ PDF this repo was scaffolded from.
 
 [**Open the live demo**](https://relay-runtime-explorer.onrender.com) · Free-tier hosting; the first visit after inactivity may take about a minute.
 
-A browser workbench now runs a real GitHub repository comparison, renders its
-dependency graph, and demonstrates missing-evidence replanning using durable
-prerequisite outputs. Live and illustrative offline data are explicitly labelled.
+Relay now supports requirement-driven investigations of Python HTTP clients:
+select async, HTTP/2, and license requirements; inspect cited findings and
+unknowns; then revise the requirements while reusing verified collection
+checkpoints. Saved run URLs restore the report and its parent comparison.
+See [investigation boundaries and evidence rules](docs/INVESTIGATIONS.md).
+The separate runtime walkthrough still demonstrates missing-evidence replanning.
+Live and illustrative offline data are explicitly labelled.
 See [the product guide](docs/PRODUCT.md) for local startup, free-tier deployment,
 verification, benchmark methodology, and the remaining production gaps.
 
