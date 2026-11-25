@@ -8,7 +8,7 @@ PDF this repo was scaffolded from.
 
 ## Product preview: Relay
 
-[**Open the live demo**](https://relay-runtime-explorer.onrender.com) · Free-tier hosting; the first visit after inactivity may take about a minute.
+[**Open the live demo**](https://relay-ze3e.onrender.com) · Free-tier hosting; the first visit after inactivity may take about a minute.
 
 Relay now supports requirement-driven investigations of Python HTTP clients:
 select async, HTTP/2, and license requirements; inspect cited findings and

@@ -6,7 +6,13 @@ not an open-ended autonomous research assistant.
 
 ## Hosted demo
 
-https://relay-runtime-explorer.onrender.com
+https://relay-ze3e.onrender.com
+
+The shorter address is a free service named `relay` (Render assigned the
+`-ze3e` suffix), service ID `srv-dc3gv9sipgvc738l5fsg`. A comparison was
+verified end to end at this address. The original deployment remains available
+at https://relay-runtime-explorer.onrender.com; run history is separate between
+the two services. Renaming the original service did not change its hostname.
 
 Verified on the free Render web service: both offline and live-GitHub recovery
 completed, the graph extended to five tasks, and a report was produced. The
