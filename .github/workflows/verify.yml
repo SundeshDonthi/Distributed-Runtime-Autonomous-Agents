@@ -1,0 +1,60 @@
+name: Verify runtime and demo
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agent_runtime
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U postgres'
+          --health-interval 5s --health-timeout 3s --health-retries 15
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd 'redis-cli ping'
+          --health-interval 5s --health-timeout 3s --health-retries 15
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost/agent_runtime
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python setup.py build_ext --inplace
+      - run: python -m pytest -q
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t relay-demo .
+      - name: Verify native kernel and browser assets are packaged
+        run: docker run --rm relay-demo python -c "from runtime.routing import _native; from pathlib import Path; assert Path('runtime/web/index.html').exists()"
+      - name: Smoke-test public recovery API
+        run: |
+          docker run -d --name relay -p 8000:8000 -e PUBLIC_DEMO=1 -e ENABLE_DEMO_MCP=0 -e DATABASE_URL=sqlite:////app/data/explorer.db relay-demo
+          trap 'docker logs relay; docker rm -f relay' EXIT
+          for attempt in $(seq 1 30); do curl -fsS http://localhost:8000/health && break || sleep 1; done
+          curl -fsS http://localhost:8000/ > /dev/null
+          curl -fsS -X POST http://localhost:8000/demo/runs -H 'Content-Type: application/json' -d '{"source":"snapshot","scenario":"recover"}' > /tmp/run.json
+          python - <<'PY'
+          import json, time, urllib.request
+          workflow_id = json.load(open('/tmp/run.json'))['id']
+          for _ in range(60):
+              data = json.load(urllib.request.urlopen(f'http://localhost:8000/workflows/{workflow_id}'))
+              if data['status'] in ('COMPLETED', 'FAILED'):
+                  break
+              time.sleep(0.25)
+          assert data['status'] == 'COMPLETED', data
+          assert data['plan_version'] == 2, data
+          PY

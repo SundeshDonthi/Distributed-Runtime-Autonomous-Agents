@@ -248,3 +248,32 @@ def unregister_tool(name: str) -> None:
 
 def list_tools() -> list[str]:
     return sorted(_REGISTRY)
+
+
+# Imported after the registry is initialized to keep tool exceptions independent.
+from runtime.workloads.repositories import fetch_repository, fetch_readme, compare_repositories
+
+_REPOSITORY_SCHEMA = {
+    "type": "object", "required": ["repository", "source"],
+    "properties": {
+        "repository": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+        "source": {"enum": ["snapshot", "live"]},
+    },
+    "additionalProperties": False,
+}
+_REPORT_SCHEMA = {
+    "type": "object", "required": ["repositories", "source", "dependency_outputs"],
+    "properties": {
+        "repositories": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string"}},
+        "source": {"enum": ["snapshot", "live"]},
+        "require_readme": {"type": ["string", "null"]},
+        "dependency_outputs": {"type": "object", "additionalProperties": {"type": "object"}},
+    },
+    "additionalProperties": False,
+}
+for _name, _capability, _fn, _schema in (
+    ("github.repository", "repository_metadata", fetch_repository, _REPOSITORY_SCHEMA),
+    ("github.readme", "repository_readme", fetch_readme, _REPOSITORY_SCHEMA),
+    ("github.compare", "repository_report", compare_repositories, _REPORT_SCHEMA),
+):
+    register_tool(ToolMetadata(_name, _capability, _fn, 0.3, 1.0, 0.0, _schema))

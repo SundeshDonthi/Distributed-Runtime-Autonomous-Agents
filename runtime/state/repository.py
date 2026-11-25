@@ -55,8 +55,8 @@ def _workflow_from_row(row: WorkflowRow) -> Workflow:
         objective=row.objective,
         status=WorkflowStatus(row.status),
         plan_version=row.plan_version,
-        created_at=row.created_at,
-        completed_at=row.completed_at,
+        created_at=ensure_aware(row.created_at),
+        completed_at=ensure_aware(row.completed_at),
     )
 
 

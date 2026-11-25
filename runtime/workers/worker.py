@@ -31,6 +31,9 @@ class Worker:
         self.worker_id = worker_id
 
     async def execute_async(self, task: Task) -> Task:
+        task.output = None
+        task.error = None
+        task.error_category = None
         task.status = TaskStatus.RUNNING
         task.started_at = utcnow()
 

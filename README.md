@@ -6,6 +6,18 @@ observability -- built as systems infrastructure underneath an agent, not as
 another LLM-calls-tools wrapper. Full design doc: see the project description
 PDF this repo was scaffolded from.
 
+## Product preview: Relay
+
+A browser workbench now runs a real GitHub repository comparison, renders its
+dependency graph, and demonstrates missing-evidence replanning using durable
+prerequisite outputs. Live and illustrative offline data are explicitly labelled.
+See [the product guide](docs/PRODUCT.md) for local startup, free-tier deployment,
+verification, benchmark methodology, and the remaining production gaps.
+
+The original phase entries below describe prototype milestones, not a claim
+that production reliability or the questionnaire's quantitative targets have
+been independently established.
+
 ## Status
 
 Tracking the project description's Section 15J roadmap (Phases 1-9).

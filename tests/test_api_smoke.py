@@ -154,3 +154,46 @@ def test_router_models_lifecycle_through_the_api(client):
     client.post("/admin/router/models/m2/activate")
     statuses = {m["model_version"]: m["status"] for m in client.get("/router-models").json()}
     assert statuses == {"m1": "retired", "m2": "active"}
+
+
+def test_explorer_serves_local_assets_with_security_headers(client):
+    response = client.get('/')
+    assert response.status_code == 200
+    assert 'Many moving parts.' in response.text
+    assert "script-src 'self'" in response.headers['content-security-policy']
+    assert client.get('/assets/app.js').status_code == 200
+
+
+def test_demo_recovery_report_is_available_from_public_api(client):
+    response = client.post('/demo/runs', json={'source':'snapshot', 'scenario':'recover'})
+    assert response.status_code == 201
+    workflow_id = response.json()['id']
+    result = client.get(f'/workflows/{workflow_id}').json()
+    assert result['status'] == 'COMPLETED'
+    assert result['plan_version'] == 2
+    assert any(t.get('output', {}).get('kind') == 'comparison_report' for t in result['tasks'])
+
+
+def test_public_mode_rejects_admin_and_arbitrary_workflows(client, monkeypatch):
+    monkeypatch.setenv('PUBLIC_DEMO', '1')
+    assert client.post('/workflows', json={'objective':'anything'}).status_code == 403
+    assert client.post('/admin/router/models/x/activate').status_code == 403
+    assert client.post('/demo/runs', json={'source':'snapshot', 'scenario':'compare'}).status_code == 201
+    assert client.post('/demo/runs', json={'tool':'naive_charge'}).status_code == 422
+
+
+def test_benchmark_endpoint_exposes_raw_paired_observations(client):
+    result = client.get('/demo/benchmark').json()
+    assert result['scope'] == 'controlled_offline_fixture'
+    assert len(result['observations']) == 2 * result['workflow_pairs']
+    assert result['limitations']
+
+
+def test_demo_admission_limit_is_enforced(client, monkeypatch):
+    from collections import deque
+    import time
+    import runtime.api.demo as demo
+    monkeypatch.setattr(demo, '_submissions', deque([time.monotonic()] * 12))
+    response = client.post('/demo/runs', json={'source':'snapshot'})
+    assert response.status_code == 429
+    assert response.headers['retry-after'] == '30'

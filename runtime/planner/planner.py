@@ -87,6 +87,11 @@ class RuleBasedPlanner(Planner):
     def generate_subplan(
         self, workflow_id: str, blocked_task_id: str, replan_index: int, context: str
     ) -> list[Task]:
+        from runtime.workloads.repositories import prerequisite_plan
+
+        repository_plan = prerequisite_plan(workflow_id, blocked_task_id, replan_index, context)
+        if repository_plan is not None:
+            return repository_plan
         task_id = f"{blocked_task_id}_prereq_{replan_index}"
         return [
             Task(

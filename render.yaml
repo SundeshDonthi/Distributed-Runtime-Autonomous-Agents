@@ -1,0 +1,17 @@
+# Free tier only; no paid database, disk, cache, or worker resources.
+services:
+  - type: web
+    name: relay-runtime-explorer
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////app/data/explorer.db
+      - key: PUBLIC_DEMO
+        value: "1"
+      - key: ENABLE_DEMO_MCP
+        value: "0"
+      - key: SCHEDULING_MODE
+        value: embedded

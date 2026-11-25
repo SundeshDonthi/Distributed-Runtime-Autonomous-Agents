@@ -1,0 +1,1434 @@
+{
+  "scope": "controlled_offline_fixture",
+  "seed": 731,
+  "workflow_pairs": 100,
+  "fault_probability": 0.2,
+  "injected_faults": 14,
+  "fixture_latency_seconds": 0.08,
+  "baseline": "sequential concurrency=1, max_replans=0",
+  "runtime": "concurrency=3, max_replans=2",
+  "latency_reduction_percent": 62.332645148738074,
+  "success_improvement_percentage_points": 14.0,
+  "success_counts": {
+    "sequential": 86,
+    "runtime": 100
+  },
+  "fault_free_median_seconds": {
+    "sequential": 0.2877727290033363,
+    "runtime": 0.10839637499884702
+  },
+  "limitations": [
+    "Synthetic fixed I/O latency; not a live API result.",
+    "Replanning policy differs between arms; success gain cannot be attributed to concurrency.",
+    "No worker-process crash is injected in this experiment.",
+    "Point estimates only; repeat on target hosting hardware and report uncertainty."
+  ],
+  "observations": [
+    {
+      "pair": 0,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2764861249597743
+    },
+    {
+      "pair": 0,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10574429202824831
+    },
+    {
+      "pair": 1,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10512325004674494
+    },
+    {
+      "pair": 1,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2761569580179639
+    },
+    {
+      "pair": 2,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2821553749963641
+    },
+    {
+      "pair": 2,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11103695799829438
+    },
+    {
+      "pair": 3,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10495012503815815
+    },
+    {
+      "pair": 3,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2849135000142269
+    },
+    {
+      "pair": 4,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29027358401799574
+    },
+    {
+      "pair": 4,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11221049999585375
+    },
+    {
+      "pair": 5,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.12326799996662885
+    },
+    {
+      "pair": 5,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.28043400001479313
+    },
+    {
+      "pair": 6,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.27944662497611716
+    },
+    {
+      "pair": 6,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1077782089705579
+    },
+    {
+      "pair": 7,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10748133400920779
+    },
+    {
+      "pair": 7,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2898234169697389
+    },
+    {
+      "pair": 8,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2883092080010101
+    },
+    {
+      "pair": 8,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11308508296497166
+    },
+    {
+      "pair": 9,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10915304103400558
+    },
+    {
+      "pair": 9,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2840477909776382
+    },
+    {
+      "pair": 10,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2827666670200415
+    },
+    {
+      "pair": 10,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10886229196330532
+    },
+    {
+      "pair": 11,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10779608302982524
+    },
+    {
+      "pair": 11,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2942917500040494
+    },
+    {
+      "pair": 12,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2844316670089029
+    },
+    {
+      "pair": 12,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11212095903465524
+    },
+    {
+      "pair": 13,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10625395801616833
+    },
+    {
+      "pair": 13,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28527612501056865
+    },
+    {
+      "pair": 14,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2898595000151545
+    },
+    {
+      "pair": 14,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10983204102376476
+    },
+    {
+      "pair": 15,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10665220796363428
+    },
+    {
+      "pair": 15,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28498254099395126
+    },
+    {
+      "pair": 16,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2932517090230249
+    },
+    {
+      "pair": 16,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11157954199006781
+    },
+    {
+      "pair": 17,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11087645799852908
+    },
+    {
+      "pair": 17,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.27633733296534047
+    },
+    {
+      "pair": 18,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.30435558303724974
+    },
+    {
+      "pair": 18,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10845195798901841
+    },
+    {
+      "pair": 19,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10832458303775638
+    },
+    {
+      "pair": 19,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28951641701860353
+    },
+    {
+      "pair": 20,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2883217920316383
+    },
+    {
+      "pair": 20,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11049908300628886
+    },
+    {
+      "pair": 21,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10602758399909362
+    },
+    {
+      "pair": 21,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2835820830077864
+    },
+    {
+      "pair": 22,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28698212502058595
+    },
+    {
+      "pair": 22,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10944245901191607
+    },
+    {
+      "pair": 23,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.106953542039264
+    },
+    {
+      "pair": 23,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2875899579958059
+    },
+    {
+      "pair": 24,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2925850839819759
+    },
+    {
+      "pair": 24,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11230258300201967
+    },
+    {
+      "pair": 25,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11259375000372529
+    },
+    {
+      "pair": 25,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.3339744999539107
+    },
+    {
+      "pair": 26,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2836797079653479
+    },
+    {
+      "pair": 26,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10774549999041483
+    },
+    {
+      "pair": 27,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10954899998614565
+    },
+    {
+      "pair": 27,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28663362498627976
+    },
+    {
+      "pair": 28,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29091724997852
+    },
+    {
+      "pair": 28,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.112135415954981
+    },
+    {
+      "pair": 29,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10762974998215213
+    },
+    {
+      "pair": 29,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28479550004703924
+    },
+    {
+      "pair": 30,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.29039737500716
+    },
+    {
+      "pair": 30,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.12181854201480746
+    },
+    {
+      "pair": 31,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10528875002637506
+    },
+    {
+      "pair": 31,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29384758399100974
+    },
+    {
+      "pair": 32,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.29037333297310397
+    },
+    {
+      "pair": 32,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.1216224170057103
+    },
+    {
+      "pair": 33,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10412674996769056
+    },
+    {
+      "pair": 33,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28479037497891113
+    },
+    {
+      "pair": 34,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29229958401992917
+    },
+    {
+      "pair": 34,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10745958396000788
+    },
+    {
+      "pair": 35,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.12147916702087969
+    },
+    {
+      "pair": 35,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2847294590319507
+    },
+    {
+      "pair": 36,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2901744580012746
+    },
+    {
+      "pair": 36,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1108585829497315
+    },
+    {
+      "pair": 37,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10795070900348946
+    },
+    {
+      "pair": 37,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28909149998798966
+    },
+    {
+      "pair": 38,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28504070901544765
+    },
+    {
+      "pair": 38,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11203449999447912
+    },
+    {
+      "pair": 39,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1016334579908289
+    },
+    {
+      "pair": 39,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2781129169743508
+    },
+    {
+      "pair": 40,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28300433297408745
+    },
+    {
+      "pair": 40,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1069031250081025
+    },
+    {
+      "pair": 41,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10958408296573907
+    },
+    {
+      "pair": 41,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28348887496395037
+    },
+    {
+      "pair": 42,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28920524998102337
+    },
+    {
+      "pair": 42,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10949583299225196
+    },
+    {
+      "pair": 43,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10735208395635709
+    },
+    {
+      "pair": 43,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28534945903811604
+    },
+    {
+      "pair": 44,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2833619999582879
+    },
+    {
+      "pair": 44,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1255946250166744
+    },
+    {
+      "pair": 45,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11382729199249297
+    },
+    {
+      "pair": 45,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2882470419863239
+    },
+    {
+      "pair": 46,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2873303339583799
+    },
+    {
+      "pair": 46,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1095995000214316
+    },
+    {
+      "pair": 47,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.1213112500263378
+    },
+    {
+      "pair": 47,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2892725830315612
+    },
+    {
+      "pair": 48,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2962150409584865
+    },
+    {
+      "pair": 48,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11224745801882818
+    },
+    {
+      "pair": 49,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10812520800391212
+    },
+    {
+      "pair": 49,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2892826670431532
+    },
+    {
+      "pair": 50,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2877565000089817
+    },
+    {
+      "pair": 50,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11022433399921283
+    },
+    {
+      "pair": 51,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.12032137502683327
+    },
+    {
+      "pair": 51,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2753819579957053
+    },
+    {
+      "pair": 52,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.27075183304259554
+    },
+    {
+      "pair": 52,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10698750003939494
+    },
+    {
+      "pair": 53,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10439604200655594
+    },
+    {
+      "pair": 53,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2828864170005545
+    },
+    {
+      "pair": 54,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29346166702453047
+    },
+    {
+      "pair": 54,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11027687502792105
+    },
+    {
+      "pair": 55,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10834079200867563
+    },
+    {
+      "pair": 55,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2920884170453064
+    },
+    {
+      "pair": 56,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29073079203953966
+    },
+    {
+      "pair": 56,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11113095900509506
+    },
+    {
+      "pair": 57,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10865599999669939
+    },
+    {
+      "pair": 57,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28638116701040417
+    },
+    {
+      "pair": 58,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.27525845798663795
+    },
+    {
+      "pair": 58,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.11374175001401454
+    },
+    {
+      "pair": 59,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1036157920025289
+    },
+    {
+      "pair": 59,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.292665584012866
+    },
+    {
+      "pair": 60,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29063512495486066
+    },
+    {
+      "pair": 60,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10776983300456777
+    },
+    {
+      "pair": 61,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10827012499794364
+    },
+    {
+      "pair": 61,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2896027080132626
+    },
+    {
+      "pair": 62,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2869620000128634
+    },
+    {
+      "pair": 62,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10855212499154732
+    },
+    {
+      "pair": 63,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10955054103396833
+    },
+    {
+      "pair": 63,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.27433191699674353
+    },
+    {
+      "pair": 64,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.3107529589906335
+    },
+    {
+      "pair": 64,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10633095796220005
+    },
+    {
+      "pair": 65,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.09711308300029486
+    },
+    {
+      "pair": 65,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2736327919992618
+    },
+    {
+      "pair": 66,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.27791345794685185
+    },
+    {
+      "pair": 66,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1081783749978058
+    },
+    {
+      "pair": 67,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11357720801606774
+    },
+    {
+      "pair": 67,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28444295801455155
+    },
+    {
+      "pair": 68,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2887209170148708
+    },
+    {
+      "pair": 68,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10693670797627419
+    },
+    {
+      "pair": 69,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.11386474996106699
+    },
+    {
+      "pair": 69,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2796441249665804
+    },
+    {
+      "pair": 70,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28916874999413267
+    },
+    {
+      "pair": 70,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10941775003448129
+    },
+    {
+      "pair": 71,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.1184159999829717
+    },
+    {
+      "pair": 71,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2870615830179304
+    },
+    {
+      "pair": 72,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2955762079800479
+    },
+    {
+      "pair": 72,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11105787503765896
+    },
+    {
+      "pair": 73,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11019641702296212
+    },
+    {
+      "pair": 73,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28201600001193583
+    },
+    {
+      "pair": 74,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29098362498916686
+    },
+    {
+      "pair": 74,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11002508300589398
+    },
+    {
+      "pair": 75,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10828604100970551
+    },
+    {
+      "pair": 75,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28929679200518876
+    },
+    {
+      "pair": 76,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2869872919982299
+    },
+    {
+      "pair": 76,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10683904198231176
+    },
+    {
+      "pair": 77,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10808058304246515
+    },
+    {
+      "pair": 77,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2870412910124287
+    },
+    {
+      "pair": 78,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2931755410390906
+    },
+    {
+      "pair": 78,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10702845803461969
+    },
+    {
+      "pair": 79,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10478691599564627
+    },
+    {
+      "pair": 79,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28741129202535376
+    },
+    {
+      "pair": 80,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2880687909782864
+    },
+    {
+      "pair": 80,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10849337500985712
+    },
+    {
+      "pair": 81,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.12525149999419227
+    },
+    {
+      "pair": 81,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2866510829771869
+    },
+    {
+      "pair": 82,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29016512498492375
+    },
+    {
+      "pair": 82,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11059299996122718
+    },
+    {
+      "pair": 83,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10761812498094514
+    },
+    {
+      "pair": 83,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28767358395271003
+    },
+    {
+      "pair": 84,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28872545901685953
+    },
+    {
+      "pair": 84,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.15994529199087992
+    },
+    {
+      "pair": 85,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.1038034160155803
+    },
+    {
+      "pair": 85,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.28892629098845646
+    },
+    {
+      "pair": 86,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2901764580165036
+    },
+    {
+      "pair": 86,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10594174999278039
+    },
+    {
+      "pair": 87,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.1215666250209324
+    },
+    {
+      "pair": 87,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.28440950001822785
+    },
+    {
+      "pair": 88,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.26737137499731034
+    },
+    {
+      "pair": 88,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10896604100707918
+    },
+    {
+      "pair": 89,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.11677349999081343
+    },
+    {
+      "pair": 89,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.288926207984332
+    },
+    {
+      "pair": 90,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2915989580214955
+    },
+    {
+      "pair": 90,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10697495902422816
+    },
+    {
+      "pair": 91,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10722125001484528
+    },
+    {
+      "pair": 91,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2877889579976909
+    },
+    {
+      "pair": 92,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2914576660259627
+    },
+    {
+      "pair": 92,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11009258299600333
+    },
+    {
+      "pair": 93,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10511141695315018
+    },
+    {
+      "pair": 93,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2826174579677172
+    },
+    {
+      "pair": 94,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2893371250247583
+    },
+    {
+      "pair": 94,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.11201599997002631
+    },
+    {
+      "pair": 95,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10910574998706579
+    },
+    {
+      "pair": 95,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2814052500179969
+    },
+    {
+      "pair": 96,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2951974159805104
+    },
+    {
+      "pair": 96,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.1228143330081366
+    },
+    {
+      "pair": 97,
+      "policy": "runtime",
+      "missing_readme": true,
+      "success": true,
+      "seconds": 0.11475391697604209
+    },
+    {
+      "pair": 97,
+      "policy": "sequential",
+      "missing_readme": true,
+      "success": false,
+      "seconds": 0.2865724999574013
+    },
+    {
+      "pair": 98,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.2837087090010755
+    },
+    {
+      "pair": 98,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10906691703712568
+    },
+    {
+      "pair": 99,
+      "policy": "runtime",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.10667033295612782
+    },
+    {
+      "pair": 99,
+      "policy": "sequential",
+      "missing_readme": false,
+      "success": true,
+      "seconds": 0.29124274995410815
+    }
+  ],
+  "recorded_at": "2026-11-25T05:57:32.258575+00:00",
+  "environment": {
+    "python": "3.14.7",
+    "os": "Darwin",
+    "architecture": "arm64"
+  }
+}

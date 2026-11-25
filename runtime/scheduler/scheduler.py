@@ -311,6 +311,17 @@ async def run_workflow_async(
                 is not None
             }
 
+            # Context is rebuilt from durable outputs each attempt, including
+            # prerequisites inserted by a replan. It travels with Redis requests.
+            for task in to_process:
+                if (task.input or {}).get("context_from_dependencies"):
+                    outputs = {dep: by_id[dep].output for dep in task.dependencies}
+                    if any(value is None for value in outputs.values()):
+                        raise ValueError("completed prerequisite has no output")
+                    task.input = {**task.input, "args": {
+                        **task.input.get("args", {}), "dependency_outputs": outputs,
+                    }}
+
             dispatched: list[Task] = []
             for task in to_process:
                 leases.acquire_lease(task, worker_id, lease_seconds)
