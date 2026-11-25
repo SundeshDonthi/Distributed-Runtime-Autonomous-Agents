@@ -14,13 +14,13 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U postgres'
+          --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 3s --health-retries 15
       redis:
         image: redis:7
         ports: ['6379:6379']
         options: >-
-          --health-cmd 'redis-cli ping'
+          --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 3s --health-retries 15
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost/agent_runtime
