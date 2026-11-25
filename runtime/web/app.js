@@ -52,7 +52,7 @@ function connect(){
 function renderReport(tasks){
   const result=tasks.find(t=>t.output?.kind==='comparison_report')?.output;if(!result)return;
   $('report').hidden=false;$('report-source').textContent=result.source==='live'?'LIVE GITHUB EVIDENCE':'ILLUSTRATIVE OFFLINE EXAMPLE';$('report-cards').replaceChildren();
-  for(const repo of result.repositories){const card=element('article',undefined,'report-card'),h=element('h3'),link=element('a',repo.repository+' ↗');link.href=repo.url;link.target='_blank';link.rel='noopener noreferrer';h.append(link);card.append(h,element('p',repo.description||'No description provided.'),element('div',`${repo.language||'Unknown'} · ${repo.license||'License unspecified'}`,'repo-meta'));
+  for(const repo of result.repositories){const card=element('article',undefined,'report-card'),h=element('h3'),link=element('a',repo.repository+'');link.href=repo.url;link.target='_blank';link.rel='noopener noreferrer';h.append(link);card.append(h,element('p',repo.description||'No description provided.'),element('div',`${repo.language||'Unknown'} · ${repo.license||'License unspecified'}`,'repo-meta'));
     if(repo.stars!==null)card.append(element('p',`${Number(repo.stars).toLocaleString()} stars · ${Number(repo.forks).toLocaleString()} forks`));$('report-cards').append(card);
   }$('methodology').textContent=result.methodology+(result.additional_evidence.length?' Recovery evidence: '+result.additional_evidence.map(r=>r.url).join(', '):'');
 }
@@ -71,7 +71,7 @@ async function follow(id, token){
       $('graph-caption').textContent=workflow.plan_version>1?'Graph extended · completed work preserved':'Independent collection → evidence assembly';
       drawGraph(workflow.tasks);showEvents(events);renderReport(workflow.tasks);
       if(['COMPLETED','FAILED','CANCELLED'].includes(workflow.status)){
-        $('run').disabled=false;$('run').textContent='Run again ↗';if(workflow.status==='FAILED')throw new Error(workflow.tasks.find(t=>t.status==='FAILED')?.error||'Workflow failed. Inspect the task for details.');return;
+        $('run').disabled=false;$('run').textContent='Run again';if(workflow.status==='FAILED')throw new Error(workflow.tasks.find(t=>t.status==='FAILED')?.error||'Workflow failed. Inspect the task for details.');return;
       }
     }catch(error){failures++;if(failures>=3||!$('run').disabled){$('error').textContent=error.message;$('error').hidden=false;$('run').disabled=false;return;}}
     await new Promise(resolve=>setTimeout(resolve,650));
@@ -79,10 +79,11 @@ async function follow(id, token){
 }
 $('run').addEventListener('click',async()=>{
   if($('mode').value==='investigation')return;
+  $('empty-state').hidden=true;
   const token=++generation;$('run').disabled=true;$('run').textContent='Dispatching…';$('error').hidden=true;$('report').hidden=true;selectedId=null;
   $('run-state').textContent='dispatching';$('elapsed').textContent='—';$('completed').textContent='0 / 4';$('version').textContent='v1';$('workflow-id').textContent='Awaiting dispatch';$('events').replaceChildren(element('li','Submitting workflow…','muted'));$('inspector').replaceChildren(element('p','Select a task to inspect its persisted output.','muted'));drawGraph(placeholder);
   try{const workflow=await api('/demo/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:$('source').value,scenario:$('scenario').value})});history.replaceState(null,'',`/?run=${encodeURIComponent(workflow.id)}`);await follow(workflow.id,token);}
-  catch(error){$('error').hidden=false;$('error').textContent=error.message;$('run').disabled=false;$('run').textContent='Try again ↗';}
+  catch(error){$('error').hidden=false;$('error').textContent=error.message;$('run').disabled=false;$('run').textContent='Try again';}
 });
 $('source').addEventListener('change',()=>{$('source-note').textContent=$('source').value==='live'?'Fetches public metadata from api.github.com. GitHub availability and rate limits apply; failures are shown without substituting offline data.':'Offline examples use illustrative metadata. Changing statistics are omitted. Every task still executes through the runtime.';});
 window.addEventListener('resize',connect);drawGraph(placeholder);

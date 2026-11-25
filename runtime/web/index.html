@@ -1,21 +1,83 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f4f0"><meta name="description" content="Explore a distributed agent runtime through live repository comparisons, dependency graphs, and recovery through replanning."><title>Relay — Technical Investigations</title><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css"><script src="/assets/app.js" defer></script><script src="/assets/investigations.js" defer></script></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8fafb">
+  <meta name="description" content="Compare Python HTTP clients against your requirements, inspect the evidence, and revise a comparison without repeating collection work.">
+  <title>Relay — Library comparison</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+  <script src="/assets/report.js" defer></script>
+  <script src="/assets/investigations.js" defer></script>
+</head>
 <body>
-<header><a class="brand" href="/" aria-label="Relay home"><span class="brand-icon">r</span>relay<span class="brand-sub">/ technical investigations</span></a><div class="header-right"><span class="system"><i></i> Interactive engineering demo</span><a class="text-link" href="https://github.com/SundeshDonthi/Distributed-Runtime-Autonomous-Agents" target="_blank" rel="noopener noreferrer">View source ↗</a></div></header>
+<header>
+  <a class="brand" href="/" aria-label="Relay home"><span class="brand-icon">r</span>Relay<span class="brand-sub">Library comparisons</span></a>
+  <a class="text-link" href="https://github.com/SundeshDonthi/Distributed-Runtime-Autonomous-Agents" target="_blank" rel="noopener noreferrer">Source code</a>
+</header>
 <main>
-<section class="intro"><div><p class="eyebrow">DISTRIBUTED SYSTEMS, MADE VISIBLE</p><h1>Better decisions.<br><span>Traceable evidence.</span></h1><p class="lede">Investigate Python HTTP clients against your requirements. Read the supporting evidence, keep unknowns explicit, and revise your question without repeating valid collection work.</p></div><aside class="architecture"><span class="arch-label">UNDER THE HOOD</span><div><b>Python</b><span>orchestration</span></div><div><b>C++</b><span>optional scoring kernel</span></div><div><b>Postgres + Redis</b><span>state & dispatch</span></div></aside></section>
-<section class="workspace" aria-label="Runtime workbench">
-<div class="workbench-head"><span class="eyebrow">01 / EXECUTION WORKBENCH</span><span class="pill" id="run-state" aria-live="polite">Ready to explore</span></div>
-<div class="controls"><div class="objective"><span class="field-label">YOUR OBJECTIVE</span><h2>Compare Python HTTP clients</h2><p>HTTPX, Requests, and aiohttp → a sourced evidence brief.</p></div><div class="selects"><label>Workspace<select id="mode"><option value="investigation">Requirements investigation</option><option value="demo">Runtime walkthrough</option></select></label><label>Data source<select id="source"><option value="snapshot">Offline example</option><option value="live">Live GitHub API</option></select></label><label id="scenario-control" hidden>Execution path<select id="scenario"><option value="compare">Standard comparison</option><option value="recover">Discover missing evidence</option></select></label><button id="run">Start investigation <span>↗</span></button></div></div>
-<fieldset id="requirements" class="requirements"><legend>WHAT MUST THE CLIENT SUPPORT?</legend><label><input type="checkbox" value="async_client" checked> Async client</label><label><input type="checkbox" value="http2"> HTTP/2</label><label><input type="checkbox" value="permissive_license" checked> Permissive license</label></fieldset><div id="revision" class="revision" hidden><p id="revision-summary"></p><button id="revise" type="button">Revise requirements ↗</button><a id="parent-link" class="text-link" hidden>View previous investigation ↗</a></div><p class="source-note" id="source-note">Offline examples use illustrative metadata. Changing statistics are omitted. Every task still executes through the runtime.</p>
-<div id="error" role="alert" hidden></div>
-<div class="metrics"><div><span>WORKFLOW</span><strong id="workflow-id">Awaiting dispatch</strong></div><div><span>ELAPSED</span><strong id="elapsed">—</strong></div><div><span>COMPLETED</span><strong id="completed">0 / 4</strong></div><div><span>PLAN VERSION</span><strong id="version">v1</strong></div></div>
-<div class="execution"><div class="graph-panel"><div class="panel-heading"><h3>Execution graph</h3><span id="graph-caption">3 independent branches · 1 convergence</span></div><div id="graph" class="graph" aria-label="Task dependency graph"></div><div class="legend"><span><i class="dot pending"></i>Pending</span><span><i class="dot running"></i>Running</span><span><i class="dot done"></i>Complete</span><span><i class="dot replan"></i>Added by replan</span></div></div><aside class="inspector"><div class="panel-heading"><h3>Task inspector</h3><span>SELECT A NODE</span></div><div id="inspector"><p class="muted">Click a task to inspect its dependencies, timestamps, and persisted output.</p></div></aside></div>
-<div class="activity"><div class="panel-heading"><h3>Activity ledger</h3><span>READ FROM PERSISTED EVENTS</span></div><ol id="events"><li class="muted">Run a workflow to see its execution history.</li></ol></div>
-</section>
-<section class="report" id="findings" hidden aria-label="Investigation findings"><div class="report-header"><div><p class="eyebrow">02 / EVIDENCE, NOT ASSUMPTIONS</p><h2>What the sources establish.</h2></div><span id="finding-source" class="pill"></span></div><p id="conclusion" class="muted"></p><div id="finding-cards" class="report-cards"></div><div id="changes" class="change-summary" hidden></div><p id="finding-limits" class="source-note"></p></section><section class="report" id="report" hidden><div class="report-header"><div><p class="eyebrow">02 / THE RESULT</p><h2>Your evidence brief.</h2></div><span id="report-source" class="pill"></span></div><div id="report-cards" class="report-cards"></div><p id="methodology" class="source-note"></p></section>
-<section class="benchmark" id="benchmark" hidden><div><p class="eyebrow">03 / MEASURED, WITH CONTEXT</p><h2>Performance you can audit.</h2><p id="benchmark-scope" class="muted"></p><a class="text-link" href="/demo/benchmark" target="_blank" rel="noopener noreferrer">Inspect all observations ↗</a></div><div class="benchmark-numbers"><div><strong id="benchmark-latency"></strong><span>lower median latency</span></div><div><strong id="benchmark-success"></strong><span>workflow completion gain</span></div></div><p class="benchmark-limit">Controlled offline experiment. Fixed 80 ms fixture reads; seeded missing-README cases. The baseline is sequential with replanning disabled. This comparison measures the combined policy—not a live-GitHub or production guarantee.</p></section>
-<section class="engineering"><div><p class="eyebrow">BUILT TO BE INSPECTED</p><h2>The execution is<br>part of the result.</h2><p class="muted">This explorer exposes the runtime’s decisions and durable state, alongside the work it produces.</p></div><div class="principles"><article><span>01</span><div><h3>Dependency-aware concurrency</h3><p>Repository collection runs independently. The report receives actual outputs only after its prerequisites complete.</p></div></article><article><span>02</span><div><h3>Recovery through replanning</h3><p>The recovery path discovers a missing README, inserts a new prerequisite, and resumes the report without recollecting completed repositories.</p></div></article><article><span>03</span><div><h3>Evidence before claims</h3><p>Runtime durations are measured per run. A single run shows elapsed time, not a speedup claim. Latency and reliability improvements need controlled comparisons against a defined baseline.</p></div></article></div></section>
-</main><footer><span>relay / distributed agent runtime<br><span class="hosting-note">Free demo: embedded execution · run history resets on host restart.<br>Separate worker deployment is available in the source.</span></span><span>Built by Sundesh Donthi <span class="footer-dot">·</span> Python + C++</span></footer>
-</body></html>
+  <section class="intro">
+    <p class="eyebrow">Python / HTTP clients</p>
+    <h1>Which client fits your project?</h1>
+    <p class="lede">Choose your requirements. Compare HTTPX, Requests, and aiohttp using repository evidence.</p>
+  </section>
+  <section class="workspace" aria-label="Runtime workbench">
+    <div class="workbench-head"><h2>Comparison setup</h2><span class="pill" id="run-state" aria-live="polite">Not run</span></div>
+    <div class="controls">
+      <div class="selects">
+        <label>Workspace<select id="mode"><option value="investigation">Library comparison</option><option value="demo">Runtime walkthrough</option></select></label>
+        <label>Evidence source<select id="source"><option value="snapshot">Example data</option><option value="live">Live GitHub</option></select></label>
+        <label id="scenario-control" hidden>Execution path<select id="scenario"><option value="compare">Standard comparison</option><option value="recover">Discover missing evidence</option></select></label>
+      </div>
+      <button id="run" type="button">Compare libraries</button>
+    </div>
+    <div id="investigation-inputs" class="input-grid">
+      <fieldset id="candidates"><legend>Libraries</legend>
+        <label><input type="checkbox" value="encode/httpx" checked> HTTPX <small>encode/httpx</small></label>
+        <label><input type="checkbox" value="psf/requests" checked> Requests <small>psf/requests</small></label>
+        <label><input type="checkbox" value="aio-libs/aiohttp" checked> aiohttp <small>aio-libs/aiohttp</small></label>
+      </fieldset>
+      <fieldset id="requirements"><legend>Requirements</legend>
+        <label><input type="checkbox" value="async_client" checked> Async client</label>
+        <label><input type="checkbox" value="http2"> HTTP/2</label>
+        <label><input type="checkbox" value="permissive_license" checked> Permissive license</label>
+        <p class="field-help">License rule: MIT, BSD, Apache-2.0, or ISC.</p>
+      </fieldset>
+    </div>
+    <p class="source-note" id="source-note"></p>
+    <div id="error" role="alert" hidden></div>
+    <div id="revision" class="revision" hidden>
+      <p id="revision-summary"></p>
+      <button id="revise" type="button">Update comparison</button>
+      <a id="parent-link" class="text-link" hidden>Previous version</a>
+    </div>
+    <div id="empty-state" class="empty-state"><h3>No comparison yet</h3><p>Pick at least one library and requirement, then select Compare libraries.</p><p class="field-help">Example data is illustrative. Switch to Live GitHub to collect current sources.</p></div>
+    <section class="report" id="findings" hidden aria-label="Investigation findings">
+      <div class="report-header"><div><h2>Comparison results</h2><p id="conclusion"></p></div><span id="finding-source" class="pill"></span></div>
+      <div class="result-actions"><button id="download-report" type="button" class="secondary">Download report</button><button id="copy-link" type="button" class="secondary">Copy run link</button><span id="action-status" role="status"></span></div>
+      <div id="finding-table" class="table-scroll" role="region" aria-label="Library requirement comparison" tabindex="0"></div>
+      <h3 class="evidence-heading">Source evidence</h3>
+      <p class="field-help">Expand a library to read excerpts and open the source documents. “Not established” means the collected evidence is insufficient.</p>
+      <div id="finding-cards" class="report-cards"></div>
+      <div id="changes" class="change-summary" hidden></div>
+      <p id="finding-limits" class="source-note"></p>
+    </section>
+    <section class="report" id="report" hidden><div class="report-header"><h2>Repository summary</h2><span id="report-source" class="pill"></span></div><div id="report-cards" class="report-cards"></div><p id="methodology" class="source-note"></p></section>
+    <details id="execution-details" class="execution-details">
+      <summary>Execution details <span>Task graph, checkpoints, and event log</span></summary>
+      <div class="metrics"><div><span>Run ID</span><strong id="workflow-id">Not started</strong></div><div><span>Elapsed</span><strong id="elapsed">—</strong></div><div><span>Tasks complete</span><strong id="completed">0 / 10</strong></div><div><span>Plan version</span><strong id="version">v1</strong></div></div>
+      <div class="execution"><div class="graph-panel"><div class="panel-heading"><h3>Task graph</h3><span id="graph-caption"></span></div><div id="graph" class="graph" aria-label="Task dependency graph"></div><div class="legend"><span><i class="dot pending"></i>Pending</span><span><i class="dot running"></i>Running</span><span><i class="dot done"></i>Complete</span><span><i class="dot replan"></i>Added by replan</span></div></div><aside class="inspector"><div class="panel-heading"><h3>Task inspector</h3></div><div id="inspector"><p class="muted">Select a task to inspect its dependencies, timing, and saved output.</p></div></aside></div>
+      <div class="activity"><div class="panel-heading"><h3>Event log</h3><span>Persisted runtime events</span></div><ol id="events"><li class="muted">No events yet.</li></ol></div>
+    </details>
+  </section>
+  <details class="project-notes"><summary>About this project <span>Runtime architecture and benchmark</span></summary>
+    <p>Relay is a working interface for a distributed agent runtime built by Sundesh Donthi. Collection tasks run concurrently; evaluation waits for their outputs. Revisions reuse compatible saved evidence and rerun the evaluation.</p>
+    <p>The public service uses embedded Python execution and SQLite. The source includes a separate worker deployment with Postgres and Redis, plus an optional C++ routing scorer. The runtime walkthrough demonstrates missing-evidence replanning.</p>
+    <section class="benchmark" id="benchmark" hidden><h2>Controlled runtime benchmark</h2><p id="benchmark-scope"></p><div class="benchmark-numbers"><div><strong id="benchmark-latency"></strong><span>lower median latency</span></div><div><strong id="benchmark-success"></strong><span>workflow completion gain</span></div></div><p class="benchmark-limit">Fixed 80 ms fixture reads with seeded missing-README cases. The baseline runs sequentially with replanning disabled. These measurements apply to the walkthrough workload, not the library investigation.</p><a class="text-link" href="/demo/benchmark" target="_blank" rel="noopener noreferrer">View benchmark observations</a></section>
+  </details>
+</main>
+<footer><span>Relay · Built by Sundesh Donthi</span><span>Free hosting: the first request may be slow. Saved runs expire on host restart.</span></footer>
+</body>
+</html>

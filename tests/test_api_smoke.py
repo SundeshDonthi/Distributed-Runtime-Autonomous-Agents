@@ -159,7 +159,8 @@ def test_router_models_lifecycle_through_the_api(client):
 def test_explorer_serves_local_assets_with_security_headers(client):
     response = client.get('/')
     assert response.status_code == 200
-    assert 'Traceable evidence.' in response.text
+    assert 'Which client fits your project?' in response.text
+    assert client.get('/assets/report.js').status_code == 200
     assert 'id="requirements"' in response.text
     assert client.get('/assets/investigations.js').status_code == 200
     assert "script-src 'self'" in response.headers['content-security-policy']

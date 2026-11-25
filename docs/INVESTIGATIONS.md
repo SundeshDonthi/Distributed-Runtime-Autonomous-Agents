@@ -71,3 +71,14 @@ checkpoints, before/after findings, and restoration from the run URL. Citation
 links are restricted to HTTPS GitHub hosts. Empty requirements are rejected before
 submission. Offline excerpts are explicitly illustrative, not quotations from the
 linked live document. On a source switch, the backend recollects all evidence.
+
+## Comparison workspace
+
+The default view focuses on library selection, requirements, and a results table.
+Source excerpts and runtime details expand on demand. Markdown export preserves
+the run URL, finding statuses, citations, document revisions, and evidence limits.
+It labels example excerpts as illustrative even after export. Browser sharing
+uses the current run URL; free-hosted history remains ephemeral.
+
+Export formatting checks run with `node --test tests/web/*.test.cjs` and are
+included in CI. No frontend build step or third-party browser library is needed.
