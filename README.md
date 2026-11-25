@@ -8,6 +8,8 @@ PDF this repo was scaffolded from.
 
 ## Product preview: Relay
 
+[**Open the live demo**](https://relay-runtime-explorer.onrender.com) · Free-tier hosting; the first visit after inactivity may take about a minute.
+
 A browser workbench now runs a real GitHub repository comparison, renders its
 dependency graph, and demonstrates missing-evidence replanning using durable
 prerequisite outputs. Live and illustrative offline data are explicitly labelled.

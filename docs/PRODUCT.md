@@ -4,6 +4,15 @@ This is the first product release of the runtime: a public workbench for a
 bounded repository-comparison workload. It is an engineering demonstration,
 not an open-ended autonomous research assistant.
 
+## Hosted demo
+
+https://relay-runtime-explorer.onrender.com
+
+Verified on the free Render web service: both offline and live-GitHub recovery
+completed, the graph extended to five tasks, and a report was produced. The
+container CI job built/imported the C++ kernel and passed the HTTP recovery
+smoke test. This does not establish the remaining production guarantees below.
+
 ## Try it locally
 
 From the repository root, with dependencies installed:
@@ -96,9 +105,10 @@ Run a local container equivalent with:
 docker compose -f compose.demo.yml up --build
 ```
 
-Docker is unavailable on the development Mac. The new CI container job
-builds the image, checks the compiled module, and executes an offline
-replanning workflow over HTTP. That job must pass before publishing.
+Docker is unavailable on the development Mac. The CI container job has
+built the image, imported the compiled module, and completed an offline
+replanning workflow over HTTP. The same image was also built successfully
+on Render, where both source modes were checked through the browser.
 
 ## Release verification
 
