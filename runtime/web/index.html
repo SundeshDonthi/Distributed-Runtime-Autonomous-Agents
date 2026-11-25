@@ -74,7 +74,7 @@
   </section>
   <details class="project-notes"><summary>About this project <span>Runtime architecture and benchmark</span></summary>
     <p>Relay is a working interface for a distributed agent runtime built by Sundesh Donthi. Collection tasks run concurrently; evaluation waits for their outputs. Revisions reuse compatible saved evidence and rerun the evaluation.</p>
-    <p>The public service uses embedded Python execution and SQLite. The source includes a separate worker deployment with Postgres and Redis, plus an optional C++ routing scorer. The runtime walkthrough demonstrates missing-evidence replanning.</p>
+    <p>Python handles orchestration, and a native C++ kernel implements routing-model scoring. The source includes a separate worker deployment with Postgres and Redis. This public service uses embedded execution and SQLite; the runtime walkthrough demonstrates missing-evidence replanning.</p>
     <section class="benchmark" id="benchmark" hidden><h2>Controlled runtime benchmark</h2><p id="benchmark-scope"></p><div class="benchmark-numbers"><div><strong id="benchmark-latency"></strong><span>lower median latency</span></div><div><strong id="benchmark-success"></strong><span>workflow completion gain</span></div></div><p class="benchmark-limit">Fixed 80 ms fixture reads with seeded missing-README cases. The baseline runs sequentially with replanning disabled. These measurements apply to the walkthrough workload, not the library investigation.</p><a class="text-link" href="/demo/benchmark" target="_blank" rel="noopener noreferrer">View benchmark observations</a></section>
   </details>
 </main>
